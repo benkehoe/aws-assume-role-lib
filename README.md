@@ -16,6 +16,8 @@ Note that in `~/.aws/config`, [you have the option to have profiles that assume 
 pip install --user aws-assume-role-lib
 ```
 
+Or just add [`aws_assume_role_lib.py`](https://raw.githubusercontent.com/benkehoe/aws-assume-role-lib/main/aws_assume_role_lib.py) to your project.
+
 # Usage
 
 ```python
