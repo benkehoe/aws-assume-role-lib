@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: 2010-09-09
+Outputs:
+  RoleArn:
+    Value: !GetAtt TestRole.Arn
+  TopicArn:
+    Value: !Ref TestTopic
+Resources:
+  TestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Action: sts:AssumeRole
+          Principal:
+            "AWS": !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AccessSNSTopic
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              Effect: Allow
+              Action: sns:Publish
+              Resource: !Ref TestTopic
+
+  TestTopic:
+    Type: AWS::SNS::Topic
+    Properties: {}

@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "aws-assume-role-lib"
+version = "1.0.0"
+description = "Assumed role session chaining (with credential refreshing) for boto3"
+authors = ["Ben Kehoe <ben@kehoe.io>"]
+license = "Apache-2.0"
+readme = "README.md"
+homepage = "https://github.com/benkehoe/aws-assume-role-lib"
+repository = "https://github.com/benkehoe/aws-assume-role-lib"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Utilities",
+    "Topic :: Software Development :: Libraries"
+]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+boto3 = "^1.13.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.1.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
