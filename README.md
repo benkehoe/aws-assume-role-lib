@@ -1,13 +1,14 @@
 # aws-assume-role-lib
-## Assumed role session chaining (with credential refreshing) for boto3
+**Assumed role session chaining (with credential refreshing) for boto3**
 
 The typical way to use boto3 when programmatically assuming a role is to explicitly call [`sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role) and use the returned credentials to create a new [`boto3.Session`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html).
-However, these credentials expire, and the code must explicitly handle this situation.
+However, these credentials expire, and the code must explicitly handle this situation (e.g., in a Lambda function, calling `AssumeRole` in every invocation).
 
 With `aws-assume-role-lib`, you can easily create assumed role sessions from parent sessions that automatically refresh expired credentials.
 
-Note that in a Lambda function that needs to assume a role, this means you don't need to make an assume role call in every invocation; you can create the assumed role session during initialization and use it for the lifetime of the execution environment.
-Note also that when using `~/.aws/config`, [you have the option to have profiles that assume a role based on another profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html), and this automatically handles refreshing expired credentials as well.
+In a Lambda function that needs to assume a role, you can create the assumed role session during initialization and use it for the lifetime of the execution environment.
+
+Note that in `~/.aws/config`, [you have the option to have profiles that assume a role based on another profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html), and this automatically handles refreshing expired credentials as well.
 
 # Installation
 
