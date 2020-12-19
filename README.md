@@ -39,9 +39,16 @@ print(assumed_role_session.client("sts").get_caller_identity()["Arn"])
 Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not; it's automatically generated if one is not provided.
 If any new arguments are added to `AssumeRole` in the future, they can be passed in via the `additional_kwargs` argument.
 
-By default, `assume_role()` checks if the parent session does not have credentials or if the parameters are invalid.
-Without this validation, errors for these issues are more confusingly raised when the child session is first used to make an API call (boto3 does not try to retrieve credentials until they are needed).
-However, this incurs a small time penalty, so it can be disabled by passing `validate=False`.
+By default, `assume_role()` checks if the parameters are invalid.
+Without this validation, errors for these issues are more confusingly raised when the child session is first used to make an API call (boto3 does make the call to retrieve credentials until they are needed).
+However, this incurs a small time penalty, so parameter validation can be disabled by passing `validate=False`.
 
 The parent session is available on the child session in the `assume_role_parent_session` property.
 Note this property is added by this library; ordinary boto3 sessions do not have it.
+
+If you would like to cache the credentials on the file system, you can use the `JSONFileCache` class, which will create files under the directory you provide in the constructor (which it will create if it doesn't exist).
+Use it like:
+```python
+assumed_role_session = assume_role(session, "arn:aws:iam::123456789012:role/MyRole", cache=JSONFileCache("path/to/dir"))
+```
+You can also use any `dict`-like object for the cache (supporting `__getitem__`/`__setitem__`/`__contains__`).

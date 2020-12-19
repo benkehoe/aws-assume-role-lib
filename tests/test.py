@@ -2,6 +2,8 @@ import argparse
 import dataclasses
 import uuid
 import json
+import tempfile
+from pathlib import Path
 
 import boto3
 import botocore
@@ -130,14 +132,24 @@ def test_no_parent_creds(session, ids):
     except NoCredentialsError:
         pass
 
-    assumed_role_session = aws_assume_role_lib.assume_role(session, ids.RoleArn, validate=False)
-
     try:
-        assumed_role_session.client("sts").get_caller_identity()
-        assert False, "Failed to raise error for lack of credentials"
-    except AttributeError as e:
-        if e.args[0] != "'NoneType' object has no attribute 'get_frozen_credentials'":
-            raise
+        aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, validate=False)
+        assert False, "Failed to raise credential validation error"
+    except NoCredentialsError:
+        pass
+
+def test_file_cache(session, ids):
+    with tempfile.TemporaryDirectory() as d:
+        file_cache = aws_assume_role_lib.JSONFileCache(d)
+
+        dir_size = len(list(Path(d).iterdir()))
+        assert dir_size == 0, "Dir is not empty"
+        assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, cache=file_cache)
+
+        assumed_role_session.client('sts').get_caller_identity()
+
+        dir_size = len(list(Path(d).iterdir()))
+        assert dir_size == 1, "Dir has wrong size({})".format(dir_size)
 
 def main():
     parser = argparse.ArgumentParser()

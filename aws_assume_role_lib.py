@@ -21,25 +21,39 @@ AssumeRole again."""
 
 import typing
 import json
+import datetime
 
 import boto3
 import botocore
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
-__all__ = ["assume_role"]
+__all__ = ["assume_role", "JSONFileCache"]
+
+# Force people to specify the path, which has a default in botocore
+class JSONFileCache(botocore.credentials.JSONFileCache):
+    """JSON file cache.
+    This provides a dict like interface that stores JSON serializable
+    objects.
+    The objects are serialized to JSON and stored in a file.  These
+    values can be retrieved at a later time.
+    """
+
+    def __init__(self, dir_path):
+        super().__init__(working_dir=dir_path)
 
 def assume_role(session: boto3.Session, RoleArn: str, *,
         RoleSessionName: str=None,
         PolicyArns: typing.List[typing.Dict[str, str]]=None,
         Policy: typing.Union[str, typing.Dict]=None,
-        DurationSeconds: int=None,
+        DurationSeconds: typing.Union[int, datetime.timedelta]=None,
         Tags: typing.List[typing.Dict[str, str]]=None,
         TransitiveTagKeys:typing.List[str]=None,
         ExternalId: str=None,
         SerialNumber: str=None,
         TokenCode: str=None,
         validate: bool=True,
+        cache: dict=None,
         additional_kwargs: typing.Dict=None) -> boto3.Session:
     """Produce a boto3 Session using the given role, assuming it from the input session
 
@@ -62,6 +76,9 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
     if Policy is not None and not isinstance(Policy, str):
         Policy = json.dumps(Policy)
 
+    if isinstance(DurationSeconds, datetime.timedelta):
+        DurationSeconds = int(DurationSeconds.total_seconds())
+
     extra_args = {}
     if additional_kwargs:
         extra_args.update(additional_kwargs)
@@ -80,6 +97,10 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         if value is not None:
             extra_args[var_name] = value
 
+    credentials = botocore_session.get_credentials()
+    if not credentials:
+        raise botocore.exceptions.NoCredentialsError
+
     if validate:
         validate_args = extra_args.copy()
         validate_args["RoleArn"] = RoleArn
@@ -89,15 +110,12 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         shape = session.client("sts")._service_model.shape_for("AssumeRoleRequest")
         botocore.validate.validate_parameters(validate_args, shape)
 
-        credentials = botocore_session.get_credentials()
-        if not credentials:
-            raise botocore.exceptions.NoCredentialsError
-
     assume_role_provider = AssumeRoleProvider(
         botocore_session.create_client,
-        botocore_session.get_credentials(),
+        credentials,
         RoleArn,
         extra_args=extra_args,
+        cache=cache,
     )
 
     assumed_role_botocore_session = botocore.session.Session()
