@@ -44,7 +44,7 @@ assume_role(
     RoleArn:           str,
     
     *,
-    # optional keyword-only arguments
+    # keyword-only arguments for AssumeRole
     RoleSessionName:   str                            = None,
     PolicyArns:        list[dict[str, str]]           = None,
     Policy:            Union[str, dict]               = None,
@@ -54,10 +54,14 @@ assume_role(
     ExternalId:        str                            = None,
     SerialNumber:      str                            = None,
     TokenCode:         str                            = None,
+    additional_kwargs: dict                           = None,
+    
+    # keyword-only arguments for returned session
     region_name:       Union[str, bool]               = None,
+    
+    # keyword-only arguments for assume_role() itself
     validate:          bool                           = True,
     cache:             dict                           = None,
-    additional_kwargs: dict                           = None
 )
 ```
 
