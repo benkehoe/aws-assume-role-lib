@@ -38,24 +38,33 @@ print(assumed_role_session.client("sts").get_caller_identity()["Arn"])
 # Interface
 
 ```
-assume_role(session: boto3.Session, RoleArn: str, *,
-    RoleSessionName: str=None,
-    PolicyArns: typing.List[typing.Dict[str, str]]=None,
-    Policy: typing.Union[str, typing.Dict]=None,
-    DurationSeconds: typing.Union[int, datetime.timedelta]=None,
-    Tags: typing.List[typing.Dict[str, str]]=None,
-    TransitiveTagKeys:typing.List[str]=None,
-    ExternalId: str=None,
-    SerialNumber: str=None,
-    TokenCode: str=None,
-    region_name: typing.Union[str, bool]=None,
-    validate: bool=True,
-    cache: dict=None,
-    additional_kwargs: typing.Dict=None)
+assume_role(
+    # required arguments
+    session:           boto3.Session,
+    RoleArn:           str,
+    
+    *,
+    # optional keyword-only arguments
+    RoleSessionName:   str                            = None,
+    PolicyArns:        list[dict[str, str]]           = None,
+    Policy:            Union[str, dict]               = None,
+    DurationSeconds:   Union[int, datetime.timedelta] = None,
+    Tags:              list[dict[str, str]]           = None,
+    TransitiveTagKeys: list[str]                      = None,
+    ExternalId:        str                            = None,
+    SerialNumber:      str                            = None,
+    TokenCode:         str                            = None,
+    region_name:       Union[str, bool]               = None,
+    validate:          bool                           = True,
+    cache:             dict                           = None,
+    additional_kwargs: dict                           = None
+)
 ```
 
 `assume_role()` takes a session and a role ARN, and optionally [other keyword arguments for `sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role).
 Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not; it's automatically generated if one is not provided.
+
+Note that unlike the boto3 sts client method, you can provide the `Policy` parameter (the [inline session policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)) as a `dict` rather than a serialized JSON string, and `DurationSeconds` as a `datetime.timedelta` rather than an integer.
 
 By default, the session returned by `assume_role()` uses the same region configuration as the input session.
 If you would like to set the region explicitly, pass it in the `region_name` parameter.
