@@ -26,13 +26,14 @@ import datetime
 import boto3
 import botocore
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = ["assume_role", "JSONFileCache"]
 
 # Force people to specify the path, which has a default in botocore
 class JSONFileCache(botocore.credentials.JSONFileCache):
     """JSON file cache.
+
     This provides a dict like interface that stores JSON serializable
     objects.
     The objects are serialized to JSON and stored in a file.  These
@@ -52,18 +53,20 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         ExternalId: str=None,
         SerialNumber: str=None,
         TokenCode: str=None,
+        region_name: typing.Union[str, bool]=None,
         validate: bool=True,
         cache: dict=None,
         additional_kwargs: typing.Dict=None) -> boto3.Session:
-    """Produce a boto3 Session using the given role, assuming it from the input session
+    """Produce a boto3 Session using the given role, assumed using the input session.
 
     Unlike creating a session with the credentials returned directly
     by sts.AssumeRole, the returned session will refresh the credentials
     automatically when they expire by calling AssumeRole again.
 
-    By default, the parameters and session credentials are checked so that errors
-    can be raised at this point, rather than more confusingly when the first call
-    is made using the child session. This can be disabled by setting validate=False.
+    By default, the parameters are checked so that errors can be raised
+    at this point, rather than more confusingly when the first call
+    is made using the child session.
+    This can be disabled by setting validate=False.
 
     The parent session is available on the child session
     in the property assume_role_parent_session.
@@ -110,7 +113,7 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         shape = session.client("sts")._service_model.shape_for("AssumeRoleRequest")
         botocore.validate.validate_parameters(validate_args, shape)
 
-    assume_role_provider = AssumeRoleProvider(
+    assume_role_provider = ProgrammaticAssumeRoleProvider(
         botocore_session.create_client,
         credentials,
         RoleArn,
@@ -124,13 +127,81 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         botocore.credentials.CredentialResolver([assume_role_provider])
     )
 
-    assumed_role_boto3_session = boto3.Session(botocore_session=assumed_role_botocore_session)
+    if region_name is True:
+        region_name = session.region_name
+    elif region_name is False:
+        region_name = None
+    elif region_name is None:
+        region_name = botocore_session.instance_variables().get('region')
+
+    session_kwargs = {
+        "botocore_session": assumed_role_botocore_session,
+        "region_name": region_name,
+    }
+
+    assumed_role_boto3_session = boto3.Session(**session_kwargs)
 
     assumed_role_boto3_session.assume_role_parent_session = session
 
     return assumed_role_boto3_session
 
-class AssumeRoleProvider(botocore.credentials.CredentialProvider):
+def patch_boto3():
+    """Add boto3.assume_role() and boto3.Session.assume_role().
+
+    Each has the same interface as assume_role() except they do not take
+    a session object as input."""
+    setattr(boto3.Session, assume_role.__name__, assume_role)
+
+    def wrapper(RoleArn: str, *,
+            RoleSessionName: str=None,
+            PolicyArns: typing.List[typing.Dict[str, str]]=None,
+            Policy: typing.Union[str, typing.Dict]=None,
+            DurationSeconds: typing.Union[int, datetime.timedelta]=None,
+            Tags: typing.List[typing.Dict[str, str]]=None,
+            TransitiveTagKeys:typing.List[str]=None,
+            ExternalId: str=None,
+            SerialNumber: str=None,
+            TokenCode: str=None,
+            region_name: typing.Union[str, bool]=None,
+            validate: bool=True,
+            cache: dict=None,
+            additional_kwargs: typing.Dict=None) -> boto3.Session:
+        """Produce a boto3 Session using the given role.
+
+        Unlike creating a session with the credentials returned directly
+        by sts.AssumeRole, the returned session will refresh the credentials
+        automatically when they expire by calling AssumeRole again.
+
+        By default, the parameters are checked so that errors can be raised
+        at this point, rather than more confusingly when the first call
+        is made using the child session.
+        This can be disabled by setting validate=False.
+
+        The parent session is available on the child session
+        in the property assume_role_parent_session.
+
+        Additional arguments for AssumeRole, if any are added in the future,
+        can be passed in additional_kwargs."""
+        session = boto3._get_default_session()
+        return assume_role(session, RoleArn,
+            RoleSessionName=RoleSessionName,
+            PolicyArns=PolicyArns,
+            Policy=Policy,
+            DurationSeconds=DurationSeconds,
+            Tags=Tags,
+            TransitiveTagKeys=TransitiveTagKeys,
+            ExternalId=ExternalId,
+            SerialNumber=SerialNumber,
+            TokenCode=TokenCode,
+            region_name=region_name,
+            validate=validate,
+            cache=cache,
+            additional_kwargs=additional_kwargs
+        )
+    wrapper.__name__ = assume_role.__name__
+    setattr(boto3, assume_role.__name__, wrapper)
+
+class ProgrammaticAssumeRoleProvider(botocore.credentials.CredentialProvider):
     METHOD = "assume-role"
 
     def __init__(self, client_creator, credential_loader, role_arn,

@@ -23,6 +23,26 @@ Resources:
               Effect: Allow
               Action: sns:Publish
               Resource: !Ref TestTopic
+        - PolicyName: AllowDAZRegion1
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              Effect: Allow
+              Action: ec2:DescribeAvailabilityZones
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  aws:RequestedRegion: us-east-1
+        - PolicyName: DenyDAZRegion2
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              Effect: Deny
+              Action: ec2:DescribeAvailabilityZones
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  aws:RequestedRegion: us-east-2
 
   TestTopic:
     Type: AWS::SNS::Topic

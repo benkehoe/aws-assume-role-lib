@@ -35,16 +35,66 @@ assumed_role_session = assume_role(session, "arn:aws:iam::123456789012:role/MyRo
 print(assumed_role_session.client("sts").get_caller_identity()["Arn"])
 ```
 
+# Interface
+
+```
+assume_role(session: boto3.Session, RoleArn: str, *,
+    RoleSessionName: str=None,
+    PolicyArns: typing.List[typing.Dict[str, str]]=None,
+    Policy: typing.Union[str, typing.Dict]=None,
+    DurationSeconds: typing.Union[int, datetime.timedelta]=None,
+    Tags: typing.List[typing.Dict[str, str]]=None,
+    TransitiveTagKeys:typing.List[str]=None,
+    ExternalId: str=None,
+    SerialNumber: str=None,
+    TokenCode: str=None,
+    region_name: typing.Union[str, bool]=None,
+    validate: bool=True,
+    cache: dict=None,
+    additional_kwargs: typing.Dict=None)
+```
+
 `assume_role()` takes a session and a role ARN, and optionally [other keyword arguments for `sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role).
 Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not; it's automatically generated if one is not provided.
-If any new arguments are added to `AssumeRole` in the future, they can be passed in via the `additional_kwargs` argument.
+
+By default, the session returned by `assume_role()` uses the same region configuration as the input session.
+If you would like to set the region explicitly, pass it in the `region_name` parameter.
+
+Note that if the parent session was created without a region passed in to the `Session` constructor, it has an implicit region, based on searching potential configuration locations.
+This means that the region used by the session can change (for example, if you set `os.environ["AWS_DEFAULT_REGION"]` to a different value).
+By default, if the parent session has an implicit region, the child session has an implicit region, and they would both change.
+If the parent session has an implicit region, and you would like to fix the child session region to be explicitly the current value, pass `region_name=True`.
+If, for some reason, you have an explicit region set on the parent, and want the child to have implicit region config, pass `region_name=False`.
 
 By default, `assume_role()` checks if the parameters are invalid.
 Without this validation, errors for these issues are more confusingly raised when the child session is first used to make an API call (boto3 does make the call to retrieve credentials until they are needed).
 However, this incurs a small time penalty, so parameter validation can be disabled by passing `validate=False`.
 
+If any new arguments are added to `AssumeRole` in the future, they can be passed in via the `additional_kwargs` argument.
+
 The parent session is available on the child session in the `assume_role_parent_session` property.
 Note this property is added by this library; ordinary boto3 sessions do not have it.
+
+# Patching boto3
+
+You can make the `assume_role()` function available directly in boto3 by calling `patch_boto3()`.
+This creates a `boto3.assume_role(RoleArn, ...)` function (note that it does not take a session, it uses the same default session as `boto3.client()`), and adds a `boto3.Session.assume_role()` method.
+So usage for that looks like:
+
+```python
+import boto3
+import aws_assume_role_lib
+aws_assume_role_lib.patch_boto3()
+
+# basically equivalent to:
+# assume_role(boto3.Session(), "arn:aws:iam::123456789012:role/MyRole")
+assumed_role_session = boto3.assume_role("arn:aws:iam::123456789012:role/MyRole")
+
+session = boto3.Session(profile_name="my-profile")
+assumed_role_session = session.assume_role("arn:aws:iam::123456789012:role/MyRole")
+```
+
+# Caching
 
 If you would like to cache the credentials on the file system, you can use the `JSONFileCache` class, which will create files under the directory you provide in the constructor (which it will create if it doesn't exist).
 Use it like:

@@ -1,30 +1,30 @@
 import argparse
-import dataclasses
 import uuid
 import json
 import tempfile
+import os
 from pathlib import Path
+from collections import namedtuple
 
 import boto3
 import botocore
 from botocore.exceptions import ClientError, ParamValidationError, NoCredentialsError
 
 import aws_assume_role_lib
+aws_assume_role_lib.patch_boto3()
 
-@dataclasses.dataclass
-class Ids:
-    RoleArn: str = None
-    TopicArn: str = None
+Ids = namedtuple("Ids", ["RoleArn", "TopicArn"])
 
 def get_ids(session, stack_name):
     cloudformation = session.resource("cloudformation")
     stack = cloudformation.Stack(stack_name)
 
-    fields = [f.name for f in dataclasses.fields(Ids)]
-    ids = Ids()
+    fields = Ids._fields
+    data = {}
     for output in stack.outputs:
         if output["OutputKey"] in fields:
-            setattr(ids, output["OutputKey"], output["OutputValue"])
+            data[output["OutputKey"]] = output["OutputValue"]
+    ids = Ids(**data)
 
     print("ids:", ids)
 
@@ -151,11 +151,122 @@ def test_file_cache(session, ids):
         dir_size = len(list(Path(d).iterdir()))
         assert dir_size == 1, "Dir has wrong size({})".format(dir_size)
 
+#TODO: these tests are brittle, need to go more specific with controlling configuration
+def test_region(session, ids):
+    parent_region = "us-east-1"
+    session = boto3.Session(region_name=parent_region)
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn)
+
+    assert assumed_role_session.region_name == parent_region
+
+    assumed_role_session.client("ec2").describe_availability_zones()
+
+    child_region = "us-east-2"
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=child_region)
+
+    assert assumed_role_session.region_name == child_region
+
+    try:
+        assumed_role_session.client("ec2").describe_availability_zones()
+        assert False, "Failed to raise authorization error"
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') != "UnauthorizedOperation":
+            raise
+
+def test_region_bool(session, ids):
+    prev_region_value = os.environ.get("AWS_DEFAULT_REGION")
+
+    region1 = "us-east-1"
+
+    session = boto3.Session()
+
+    os.environ["AWS_DEFAULT_REGION"] = region1
+
+    assert session.region_name == region1
+
+    # Test for implicit config on session that if we don't change anything, both true and false stay the same
+
+    assumed_role_session1 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=True)
+    assert assumed_role_session1.region_name == region1
+
+    assumed_role_session2 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=False)
+    assert assumed_role_session2.region_name == region1
+
+    assumed_role_session1.client("ec2").describe_availability_zones()
+    assumed_role_session2.client("ec2").describe_availability_zones()
+
+    # Test for implicit config on session that if we create it and later change implicit config
+    # true stays at the original value
+    # false gets the new value
+
+    region2 = "us-east-2"
+
+    assumed_role_session1 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=True)
+    assumed_role_session2 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=False)
+
+    os.environ["AWS_DEFAULT_REGION"] = region2
+
+    assert assumed_role_session1.region_name == region1, "Region mismatch: is {} should be {}".format(assumed_role_session1.region_name, region1)
+    assert assumed_role_session2.region_name == region2, "Region mismatch: is {} should be {}".format(assumed_role_session2.region_name, region2)
+
+    assumed_role_session1.client("ec2").describe_availability_zones()
+    try:
+        assumed_role_session2.client("ec2").describe_availability_zones()
+        assert False, "Failed to raise authorization error"
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') != "UnauthorizedOperation":
+            raise
+
+    # Test for explicit config contrary to implict config
+    # true stays with explicit config
+    # false goes to implict config
+
+    session = boto3.Session(region_name=region1)
+
+    assumed_role_session1 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=True)
+    assumed_role_session2 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=False)
+
+    assert assumed_role_session1.region_name == region1
+    assert assumed_role_session2.region_name == region2
+
+    assumed_role_session1.client("ec2").describe_availability_zones()
+    try:
+        assumed_role_session2.client("ec2").describe_availability_zones()
+        assert False, "Failed to raise authorization error"
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') != "UnauthorizedOperation":
+            raise
+
+    if prev_region_value is None:
+        os.environ.pop("AWS_DEFAULT_REGION")
+    else:
+        os.environ["AWS_DEFAULT_REGION"] = prev_region_value
+
+def test_patch_boto3(session, ids):
+    assumed_role_session = session.assume_role(RoleArn=ids.RoleArn)
+
+    response = assumed_role_session.client("sts").get_caller_identity()
+    assumed_role_arn = response["Arn"]
+
+    assert ids.RoleArn.rsplit("/", 1)[1] == assumed_role_arn.split("/")[1]
+
+    boto3.DEFAULT_SESSION = session
+
+    assumed_role_session = boto3.assume_role(RoleArn=ids.RoleArn)
+
+    response = assumed_role_session.client("sts").get_caller_identity()
+    assumed_role_arn = response["Arn"]
+
+    assert ids.RoleArn.rsplit("/", 1)[1] == assumed_role_arn.split("/")[1]
+
+
 def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("stack_name")
     parser.add_argument("--profile")
+    parser.add_argument("test_name", nargs="*")
 
     args = parser.parse_args()
 
@@ -165,6 +276,8 @@ def main():
 
     for name, value in globals().items():
         if name.startswith("test_") and callable(value):
+            if args.test_name and name not in args.test_name:
+                continue
             print("Running", name)
             value(session, ids)
 
