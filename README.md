@@ -46,7 +46,7 @@ SESSION = boto3.Session()
 
 # Get the config
 ROLE_ARN = os.environ["ROLE_ARN"]
-ROLE_SESSION_NAME = generate_lambda_session_name()
+ROLE_SESSION_NAME = generate_lambda_session_name() # see below for details
 
 # Assume the session
 ASSUMED_ROLE_SESSION = assume_role(SESSION, ROLE_ARN, RoleSessionName=ROLE_SESSION_NAME)
