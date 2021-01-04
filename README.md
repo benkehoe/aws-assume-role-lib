@@ -35,6 +35,29 @@ assumed_role_session = assume_role(session, "arn:aws:iam::123456789012:role/MyRo
 print(assumed_role_session.client("sts").get_caller_identity()["Arn"])
 ```
 
+In Lambda, initialize the sessions outside the handler:
+```python
+import os
+import boto3
+from aws_assume_role_lib import assume_role
+
+# Get the Lambda session
+SESSION = boto3.Session()
+
+# Get the role
+ASSUMED_ROLE_ARN = os.environ["ASSUMED_ROLE_ARN"]
+
+# Assume the session
+ASSUMED_ROLE_SESSION = assume_role(SESSION, ASSUMED_ROLE_ARN)
+
+def handler(event, context):
+    # do stuff with the Lambda role using SESSION
+    print(SESSION.client("sts").get_caller_identity()["Arn"])
+
+    # do stuff with the assumed role using ASSUMED_ROLE_SESSION
+    print(ASSUMED_ROLE_SESSION.client("sts").get_caller_identity()["Arn"])
+```
+
 # Interface
 
 ```
