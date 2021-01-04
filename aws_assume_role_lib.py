@@ -22,11 +22,13 @@ AssumeRole again."""
 import typing
 import json
 import datetime
+import os
+import re
 
 import boto3
 import botocore
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = ["assume_role", "JSONFileCache"]
 
@@ -200,6 +202,52 @@ def patch_boto3():
         )
     wrapper.__name__ = assume_role.__name__
     setattr(boto3, assume_role.__name__, wrapper)
+
+def generate_lambda_session_name(
+        function_name: str=None,
+        function_version: str=None,
+        identifier: str=None):
+    """For Lambda functions, generate a role session name that identifies the function.
+
+    If the function version is $LATEST, the returned value is of the form
+    {function_name}.{identifier}
+
+    Otherwise, the returned value is of the form
+    {function_name}.{function_version}.{identifier}
+
+    The identifier is pulled from the log stream name, falling back to a timestamp
+    if that fails for any reason. You can override any of the values with the
+    function arguments. Any characters in any of the values that are not valid for
+    role session names are replaced with underscores.
+    """
+    if not function_name:
+        function_name = os.environ["AWS_LAMBDA_FUNCTION_NAME"]
+
+    components = [function_name]
+
+    if not function_version:
+        function_version = os.environ.get("AWS_LAMBDA_FUNCTION_VERSION", "")
+    if function_version and function_version != "$LATEST":
+        components.append(str(function_version))
+
+    if not identifier:
+        # the execution environment has a unique ID, but it's not exposed directly
+        # the log stream name (currently) includes it and looks like
+        # 2020/01/31/[$LATEST]3893xmpl7fac4485b47bb75b671a283c
+        log_stream_name = os.environ.get("AWS_LAMBDA_LOG_STREAM_NAME", "")
+        match = re.search(r"\w+$", log_stream_name)
+        if match:
+            identifier = match.group()
+        else:
+            # fallback to a timestamp if something doesn't work
+            identifier = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    components.append(identifier)
+
+    value = ".".join(components)
+
+    clean_value = re.sub(r"[^a-zA-Z0-9_=,.@-]+", "_", value)
+
+    return clean_value
 
 class ProgrammaticAssumeRoleProvider(botocore.credentials.CredentialProvider):
     METHOD = "assume-role"

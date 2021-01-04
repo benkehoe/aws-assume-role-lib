@@ -3,6 +3,7 @@ import uuid
 import json
 import tempfile
 import os
+import datetime
 from pathlib import Path
 from collections import namedtuple
 
@@ -50,14 +51,14 @@ def test_assume_role(session, ids):
     sns.publish(TopicArn=ids.TopicArn, Message=message)
 
 def test_assume_role_policy_deny(session, ids):
-    policy = json.dumps({
+    policy = {
         "Version": "2012-10-17",
         "Statement": [{
             "Effect": "Deny",
             "Action": "sns:*",
             "Resource": "*"
         }]
-    })
+    }
 
     assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, Policy=policy)
 
@@ -85,6 +86,12 @@ def test_role_session_name(session, ids):
     response = assumed_role_session.client('sts').get_caller_identity()
 
     assert response["Arn"].split("/")[-1] == session_name
+
+def test_session_duration(session, ids):
+    duration = datetime.timedelta(minutes=15)
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, DurationSeconds=duration)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
 
 def test_parent_session(session, ids):
     parent_arn_1 = session.client('sts').get_caller_identity()['Arn']

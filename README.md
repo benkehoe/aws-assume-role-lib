@@ -39,16 +39,17 @@ In Lambda, initialize the sessions outside the handler:
 ```python
 import os
 import boto3
-from aws_assume_role_lib import assume_role
+from aws_assume_role_lib import assume_role, generate_lambda_session_name
 
 # Get the Lambda session
 SESSION = boto3.Session()
 
-# Get the role
-ASSUMED_ROLE_ARN = os.environ["ASSUMED_ROLE_ARN"]
+# Get the config
+ROLE_ARN = os.environ["ROLE_ARN"]
+ROLE_SESSION_NAME = generate_lambda_session_name()
 
 # Assume the session
-ASSUMED_ROLE_SESSION = assume_role(SESSION, ASSUMED_ROLE_ARN)
+ASSUMED_ROLE_SESSION = assume_role(SESSION, ROLE_ARN, RoleSessionName=ROLE_SESSION_NAME)
 
 def handler(event, context):
     # do stuff with the Lambda role using SESSION
@@ -65,7 +66,7 @@ assume_role(
     # required arguments
     session:           boto3.Session,
     RoleArn:           str,
-    
+
     *,
     # keyword-only arguments for AssumeRole
     RoleSessionName:   str                            = None,
@@ -78,10 +79,10 @@ assume_role(
     SerialNumber:      str                            = None,
     TokenCode:         str                            = None,
     additional_kwargs: dict                           = None,
-    
+
     # keyword-only arguments for returned session
     region_name:       Union[str, bool]               = None,
-    
+
     # keyword-only arguments for assume_role() itself
     validate:          bool                           = True,
     cache:             dict                           = None,
@@ -129,6 +130,18 @@ assumed_role_session = boto3.assume_role("arn:aws:iam::123456789012:role/MyRole"
 session = boto3.Session(profile_name="my-profile")
 assumed_role_session = session.assume_role("arn:aws:iam::123456789012:role/MyRole")
 ```
+
+# Role session names for Lambda functions
+If you don't provide a role session name, the underlying `botocore` library [generates one using a timestamp](https://github.com/boto/botocore/blob/c53072ec257ef47e2fc749c384a9488fd3f3e626/botocore/credentials.py#L730).
+That's the best it can do, because it doesn't have any other context.
+
+But in a Lambda function, we do have additional context, the Lambda function itself.
+If you call the `generate_lambda_session_name()` function inside an instance of a Lambda function, it returns a session name that corresponds to the function instance.
+The purpose of this is to simplify tracing usage of the session back to the function instance.
+
+If the version is `$LATEST`, the returned value is has the format `{function_name}.{identifier}`, otherwise it has the format `{function_name}.{function_version}.{identifier}`.
+The identifier is the function instance's unique ID extracted from the CloudWatch log stream name; if this fails for any reason, it's a timestamp instead.
+You can override any of the values by providing them as arguments to the function.
 
 # Caching
 
