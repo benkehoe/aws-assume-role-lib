@@ -136,7 +136,7 @@ If you don't provide a role session name, the underlying `botocore` library [gen
 That's the best it can do, because it doesn't have any other context.
 
 But in a Lambda function, we do have additional context, the Lambda function itself.
-If you call the `generate_lambda_session_name()` function inside an instance of a Lambda function, it returns a session name that corresponds to the function instance.
+If you call `generate_lambda_session_name()` inside an instance of a Lambda function, it returns a session name that corresponds to the function instance, which you can use when assuming a role in the Lambda function (either with this library's `assume_role()` or any other method).
 The purpose of this is to simplify tracing usage of the session back to the function instance.
 
 If the version is `$LATEST`, the returned value is has the format `{function_name}.{identifier}`, otherwise it has the format `{function_name}.{function_version}.{identifier}`.
