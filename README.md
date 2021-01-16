@@ -10,6 +10,8 @@ In a Lambda function that needs to assume a role, you can create the assumed rol
 
 Note that in `~/.aws/config`, [you have the option to have profiles that assume a role based on another profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html), and this automatically handles refreshing expired credentials as well.
 
+If you've only used `boto3.client()` and are not familiar with boto3 session, [here's an explainer](https://ben11kehoe.medium.com/boto3-sessions-and-why-you-should-use-them-9b094eb5ca8e).
+
 # Installation
 
 ```bash
