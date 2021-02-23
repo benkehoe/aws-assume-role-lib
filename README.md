@@ -10,7 +10,7 @@ In a Lambda function that needs to assume a role, you can create the assumed rol
 
 Note that in `~/.aws/config`, [you have the option to have profiles that assume a role based on another profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html), and this automatically handles refreshing expired credentials as well.
 
-If you've only used `boto3.client()` and are not familiar with boto3 session, [here's an explainer](https://ben11kehoe.medium.com/boto3-sessions-and-why-you-should-use-them-9b094eb5ca8e).
+If you've only used `boto3.client()` and are not familiar with boto3 sessions, [here's an explainer](https://ben11kehoe.medium.com/boto3-sessions-and-why-you-should-use-them-9b094eb5ca8e).
 
 # Installation
 
@@ -34,6 +34,10 @@ session = boto3.Session()
 # Assume the session
 assumed_role_session = assume_role(session, "arn:aws:iam::123456789012:role/MyRole")
 
+# do stuff with the original credentials
+print(session.client("sts").get_caller_identity()["Arn"])
+
+# do stuff with the assumed role
 print(assumed_role_session.client("sts").get_caller_identity()["Arn"])
 ```
 
@@ -106,7 +110,7 @@ If the parent session has an implicit region, and you would like to fix the chil
 If, for some reason, you have an explicit region set on the parent, and want the child to have implicit region config, pass `region_name=False`.
 
 By default, `assume_role()` checks if the parameters are invalid.
-Without this validation, errors for these issues are more confusingly raised when the child session is first used to make an API call (boto3 does make the call to retrieve credentials until they are needed).
+Without this validation, errors for these issues are more confusingly raised when the child session is first used to make an API call (boto3 doesn't make the call to retrieve credentials until they are needed).
 However, this incurs a small time penalty, so parameter validation can be disabled by passing `validate=False`.
 
 If any new arguments are added to `AssumeRole` in the future, they can be passed in via the `additional_kwargs` argument.
