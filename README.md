@@ -1,7 +1,7 @@
 # aws-assume-role-lib
 **Assumed role session chaining (with credential refreshing) for boto3**
 
-The typical way to use boto3 when programmatically assuming a role is to explicitly call [`sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role) and use the returned credentials to create a new [`boto3.Session`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html).
+The typical way to use boto3 when programmatically assuming a role is to explicitly call [`sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role) and use the returned credentials to create a new [`boto3.Session`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html) or client.
 It looks like this mess of code:
 
 ```python
@@ -11,7 +11,7 @@ session = boto3.Session()
 sts = session.client("sts")
 response = sts.assume_role(
     RoleArn=role_arn,
-    RoleSessionName="something_you_have_decide_on"
+    RoleSessionName="something_you_have_to_think_about"
 )
 
 credentials = response["Credentials"]
