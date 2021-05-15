@@ -84,6 +84,7 @@ assume_role(
     ExternalId:        str                            = None,
     SerialNumber:      str                            = None,
     TokenCode:         str                            = None,
+    SourceIdentity:    str                            = None,
     additional_kwargs: dict                           = None,
 
     # keyword-only arguments for returned session
