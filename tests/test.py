@@ -267,6 +267,26 @@ def test_patch_boto3(session, ids):
 
     assert ids.RoleArn.rsplit("/", 1)[1] == assumed_role_arn.split("/")[1]
 
+def test_lambda_session_name(session, ids):
+    func_name = str(uuid.uuid4())
+    identifier = str(uuid.uuid4())
+
+    name_1 = aws_assume_role_lib.generate_lambda_session_name(
+        function_name=func_name,
+        identifier=identifier
+    )
+
+    assert name_1 == f"{func_name}.{identifier}"
+
+    version = 1
+
+    name_2 = aws_assume_role_lib.generate_lambda_session_name(
+        function_name=func_name,
+        function_version=version,
+        identifier=identifier
+    )
+
+    assert name_2 == f"{func_name}.{version}.{identifier}"
 
 def main():
     parser = argparse.ArgumentParser()

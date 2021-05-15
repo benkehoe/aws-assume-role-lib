@@ -55,6 +55,7 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         ExternalId: str=None,
         SerialNumber: str=None,
         TokenCode: str=None,
+        SourceIdentity: str=None,
         region_name: typing.Union[str, bool]=None,
         validate: bool=True,
         cache: dict=None,
@@ -97,7 +98,8 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
             "TransitiveTagKeys",
             "ExternalId",
             "SerialNumber",
-            "TokenCode"]:
+            "TokenCode",
+            "SourceIdentity"]:
         value = locals()[var_name]
         if value is not None:
             extra_args[var_name] = value
@@ -164,6 +166,7 @@ def patch_boto3():
             ExternalId: str=None,
             SerialNumber: str=None,
             TokenCode: str=None,
+            SourceIdentity: str=None,
             region_name: typing.Union[str, bool]=None,
             validate: bool=True,
             cache: dict=None,
@@ -195,6 +198,7 @@ def patch_boto3():
             ExternalId=ExternalId,
             SerialNumber=SerialNumber,
             TokenCode=TokenCode,
+            SourceIdentity=SourceIdentity,
             region_name=region_name,
             validate=validate,
             cache=cache,
@@ -223,12 +227,15 @@ def generate_lambda_session_name(
     if not function_name:
         function_name = os.environ["AWS_LAMBDA_FUNCTION_NAME"]
 
-    components = [function_name]
+    name_component = function_name
 
     if not function_version:
         function_version = os.environ.get("AWS_LAMBDA_FUNCTION_VERSION", "")
+
     if function_version and function_version != "$LATEST":
-        components.append(str(function_version))
+        version_component = "." + str(function_version)
+    else:
+        version_component = ""
 
     if not identifier:
         # the execution environment has a unique ID, but it's not exposed directly
@@ -241,9 +248,9 @@ def generate_lambda_session_name(
         else:
             # fallback to a timestamp if something doesn't work
             identifier = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-    components.append(identifier)
+    identifier_component = "." + identifier
 
-    value = ".".join(components)
+    value = f"{name_component}{version_component}{identifier_component}"
 
     clean_value = re.sub(r"[^a-zA-Z0-9_=,.@-]+", "_", value)
 
