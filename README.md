@@ -2,11 +2,45 @@
 **Assumed role session chaining (with credential refreshing) for boto3**
 
 The typical way to use boto3 when programmatically assuming a role is to explicitly call [`sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role) and use the returned credentials to create a new [`boto3.Session`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html).
-However, these credentials expire, and the code must explicitly handle this situation (e.g., in a Lambda function, calling `AssumeRole` in every invocation).
+It looks like this mess of code:
 
-With `aws-assume-role-lib`, you can easily create assumed role sessions from parent sessions that automatically refresh expired credentials.
+```python
+role_arn = "arn:aws:iam::123456789012:role/MyRole"
+session = boto3.Session()
 
-In a Lambda function that needs to assume a role, you can create the assumed role session during initialization and use it for the lifetime of the execution environment.
+sts = session.client("sts")
+response = sts.assume_role(
+    RoleArn=role_arn,
+    RoleSessionName="something_you_have_decide_on"
+)
+
+credentials = response["Credentials"]
+
+assumed_role_session = boto3.Session(
+    aws_access_key_id=credentials["AccessKeyId"],
+    aws_secret_access_key=credentials["SecretAccessKey"],
+    aws_session_token=credentials["SessionToken"]
+)
+
+# use the session
+print(assumed_role_session.client("sts").get_caller_identity())
+```
+
+This code is verbose, requires specifying a role session name even if you don't care what it is, and must explicitly handle credential expiration and refreshing if needed (in a Lambda function, this is typically handled by calling `AssumeRole` in every invocation).
+
+With `aws-assume-role-lib`, all that collapses down to a single line. The assumed role session automatically refreshes expired credentials and generates a role session name if one is not provided.
+
+```python
+role_arn = "arn:aws:iam::123456789012:role/MyRole"
+session = boto3.Session()
+
+assumed_role_session = aws_assume_role_lib.assume_role(session, role_arn)
+
+# use the session
+print(assumed_role_session.client("sts").get_caller_identity())
+```
+
+In a Lambda function that needs to assume a role, you can create the assumed role session during initialization and use it for the lifetime of the execution environment, with `AssumeRole` calls only being made when necessary, not on every invocation.
 
 Note that in `~/.aws/config`, [you have the option to have profiles that assume a role based on another profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html), and this automatically handles refreshing expired credentials as well.
 
@@ -41,7 +75,7 @@ print(session.client("sts").get_caller_identity()["Arn"])
 print(assumed_role_session.client("sts").get_caller_identity()["Arn"])
 ```
 
-In Lambda, initialize the sessions outside the handler:
+In Lambda, initialize the sessions outside the handler, and `AssumeRole` will only get called when necessary, rather than on every invocation:
 ```python
 import os
 import boto3
@@ -99,7 +133,7 @@ assume_role(
 `assume_role()` takes a session and a role ARN, and optionally [other keyword arguments for `sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role).
 Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not; it's automatically generated if one is not provided.
 
-Note that unlike the boto3 sts client method, you can provide the `Policy` parameter (the [inline session policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)) as a `dict` rather than a serialized JSON string, and `DurationSeconds` as a `datetime.timedelta` rather than an integer.
+Note that unlike the boto3 sts client method, you can provide the `Policy` parameter (the [inline session policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)) as a `dict` instead of as a serialized JSON string, and `DurationSeconds` as a `datetime.timedelta` instead of as an integer.
 
 By default, the session returned by `assume_role()` uses the same region configuration as the input session.
 If you would like to set the region explicitly, pass it in the `region_name` parameter.
@@ -114,7 +148,7 @@ By default, `assume_role()` checks if the parameters are invalid.
 Without this validation, errors for these issues are more confusingly raised when the child session is first used to make an API call (boto3 doesn't make the call to retrieve credentials until they are needed).
 However, this incurs a small time penalty, so parameter validation can be disabled by passing `validate=False`.
 
-If any new arguments are added to `AssumeRole` in the future, they can be passed in via the `additional_kwargs` argument.
+If any new arguments are added to `AssumeRole` in the future and this library is not updated to allow them directly, they can be passed in as a dict via the `additional_kwargs` argument.
 
 The parent session is available on the child session in the `assume_role_parent_session` property.
 Note this property is added by this library; ordinary boto3 sessions do not have it.
@@ -130,9 +164,9 @@ import boto3
 import aws_assume_role_lib
 aws_assume_role_lib.patch_boto3()
 
-# basically equivalent to:
-# assume_role(boto3.Session(), "arn:aws:iam::123456789012:role/MyRole")
 assumed_role_session = boto3.assume_role("arn:aws:iam::123456789012:role/MyRole")
+# the above is basically equivalent to:
+# aws_assume_role_lib.assume_role(boto3.Session(), "arn:aws:iam::123456789012:role/MyRole")
 
 session = boto3.Session(profile_name="my-profile")
 assumed_role_session = session.assume_role("arn:aws:iam::123456789012:role/MyRole")
