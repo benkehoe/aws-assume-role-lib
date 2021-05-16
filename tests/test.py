@@ -288,6 +288,109 @@ def test_lambda_session_name(session, ids):
 
     assert name_2 == f"{func_name}.{version}.{identifier}"
 
+def test_get_role_arn(session, ids):
+    account_1_str = "123456789012"
+    account_1_num =  123456789012
+
+    account_2_full_str = "001234567890"
+    account_2_str      =   "1234567890"
+    account_2_num      =    1234567890
+
+    role_name = str(uuid.uuid4())
+
+    # account formatting
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:role/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_num, role_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:role/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_2_str, role_name)
+    assert arn == f"arn:aws:iam::{account_2_full_str}:role/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_2_num, role_name)
+    assert arn == f"arn:aws:iam::{account_2_full_str}:role/{role_name}"
+
+    # partition
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name, partition="aws-cn")
+    assert arn == f"arn:aws-cn:iam::{account_1_str}:role/{role_name}"
+
+    # path
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name, path="/")
+    assert arn == f"arn:aws:iam::{account_1_str}:role/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name, path="te/st")
+    assert arn == f"arn:aws:iam::{account_1_str}:role/te/st/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name, path="/te/st")
+    assert arn == f"arn:aws:iam::{account_1_str}:role/te/st/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name, path="te/st/")
+    assert arn == f"arn:aws:iam::{account_1_str}:role/te/st/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, role_name, path="/te/st/")
+    assert arn == f"arn:aws:iam::{account_1_str}:role/te/st/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, "/" + role_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:role/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, "te/st/" + role_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:role/te/st/{role_name}"
+
+    arn = aws_assume_role_lib.get_role_arn(account_1_str, "/te/st/" + role_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:role/te/st/{role_name}"
+
+    try:
+        arn = aws_assume_role_lib.get_role_arn(account_1_str, "/te/st/" + role_name, path="test")
+        assert False
+    except Exception as e:
+        pass
+
+def test_get_assumed_role_session_arn(session, ids):
+    account_1_str = "123456789012"
+    account_1_num =  123456789012
+
+    account_2_str = "1234567890"
+    account_2_num =  1234567890
+
+    role_name = str(uuid.uuid4())
+    role_session_name = str(uuid.uuid4())
+
+    # account formatting
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_str, role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_num, role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_str, role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_num, role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    # partition
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_str, role_name, role_session_name, partition="aws-cn")
+    assert arn == f"arn:aws-cn:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    # path
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_str, "/" + role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_str, "te/st/" + role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
+    arn = aws_assume_role_lib.get_assumed_role_session_arn(
+        account_1_str, "/te/st/" + role_name, role_session_name)
+    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+
 def main():
     parser = argparse.ArgumentParser()
 

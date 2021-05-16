@@ -184,6 +184,28 @@ If the version is `$LATEST`, the returned value is has the format `{function_nam
 The identifier is the function instance's unique ID extracted from the CloudWatch log stream name; if this fails for any reason, it's a timestamp instead.
 You can override any of the values by providing them as arguments to the function.
 
+# ARN formatting
+`assume_role()` requires a role ARN, and if you know the role name and account id but have trouble remembering the [exact format of role ARNs](https://docs.aws.amazon.com/service-authorization/latest/reference/list_identityandaccessmanagement.html#identityandaccessmanagement-resources-for-iam-policies), there's `get_role_arn()` for you.
+There's additionally a `get_assumed_role_session_arn()` for formatting assumed role session ARNs.
+
+```
+get_role_arn(
+    account_id: typing.Union[str, int],
+    role_name:  str,
+    path:       str                    = "",
+    partition:  str                    = "aws",
+)
+
+get_assumed_role_session_arn(
+    account_id:        typing.Union[str, int],
+    role_name:         str,
+    role_session_name: str,
+    partition:         str                    = "aws",
+)
+```
+
+If the role name has a path, it can be provided as part of the name, or it can be provided separately on `get_role_arn()` (assumed role session ARNs do not include the role path).
+
 # Caching
 
 If you would like to cache the credentials on the file system, you can use the `JSONFileCache` class, which will create files under the directory you provide in the constructor (which it will create if it doesn't exist).

@@ -24,11 +24,12 @@ import json
 import datetime
 import os
 import re
+import numbers
 
 import boto3
 import botocore
 
-__version__ = "1.3.0"
+__version__ = "1.5.0" # update here and pyproject.toml
 
 __all__ = ["assume_role", "JSONFileCache"]
 
@@ -44,6 +45,53 @@ class JSONFileCache(botocore.credentials.JSONFileCache):
 
     def __init__(self, dir_path):
         super().__init__(working_dir=dir_path)
+
+def get_role_arn(
+        account_id: typing.Union[str, int],
+        role_name: str,
+        path: str="",
+        partition: str="aws"):
+    """Get a correctly-formatted IAM role ARN.
+
+    You can provide the path separately or as part of the role name."""
+    if isinstance(account_id, numbers.Number):
+        account_id = str(int(account_id))
+    if isinstance(account_id, str) and len(account_id) < 12:
+        account_id = account_id.rjust(12, "0")
+
+    if "/" in role_name and path:
+        raise ValueError("Path cannot be given in both role_name and path")
+
+    if "/" in role_name:
+        path, role_name = role_name.rsplit("/", 1)
+
+    if path == "/":
+        path = ""
+    if path.startswith("/"):
+        path = path[1:]
+    if path and not path.endswith("/"):
+        path = path + "/"
+
+    return f"arn:{partition}:iam::{account_id}:role/{path}{role_name}"
+
+def get_assumed_role_session_arn(
+        account_id: typing.Union[str, int],
+        role_name: str,
+        role_session_name: str,
+        partition: str="aws"):
+    """Get a correctly-formatted IAM assumed role session ARN.
+
+    Note these ARNs do not contain the role's path, if it has one.
+    If you provide the role name with path, it will be stripped off."""
+    if isinstance(account_id, numbers.Number):
+        account_id = str(int(account_id))
+    if isinstance(account_id, str) and len(account_id) < 12:
+        account_id = account_id.rjust(12, "0")
+
+    if "/" in role_name:
+        role_name = role_name.rsplit("/", 1)[1]
+
+    return f"arn:{partition}:iam::{account_id}:assumed-role/{role_name}/{role_session_name}"
 
 def assume_role(session: boto3.Session, RoleArn: str, *,
         RoleSessionName: str=None,
