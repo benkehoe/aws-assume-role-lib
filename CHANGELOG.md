@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6
+* Ensured new functions get imported when doing `from aws_assume_role_lib import *`.
+
 ## v1.5
 * Added `get_role_arn()` and `get_assumed_role_session_arn()` functions.
 

@@ -29,9 +29,9 @@ import numbers
 import boto3
 import botocore
 
-__version__ = "1.5.0" # update here and pyproject.toml
+__version__ = "1.6.0" # update here and pyproject.toml
 
-__all__ = ["assume_role", "JSONFileCache"]
+__all__ = ["assume_role", "get_role_arn", "get_assumed_role_arn", "generate_lambda_session_name", "patch_boto3", "JSONFileCache"]
 
 # Force people to specify the path, which has a default in botocore
 class JSONFileCache(botocore.credentials.JSONFileCache):
