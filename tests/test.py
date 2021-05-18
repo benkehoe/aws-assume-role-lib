@@ -268,8 +268,8 @@ def test_patch_boto3(session, ids):
     assert ids.RoleArn.rsplit("/", 1)[1] == assumed_role_arn.split("/")[1]
 
 def test_lambda_session_name(session, ids):
-    func_name = str(uuid.uuid4())
-    identifier = str(uuid.uuid4())
+    func_name = uuid.uuid4().hex[:16]
+    identifier = uuid.uuid4().hex[:16]
 
     name_1 = aws_assume_role_lib.generate_lambda_session_name(
         function_name=func_name,
@@ -287,6 +287,85 @@ def test_lambda_session_name(session, ids):
     )
 
     assert name_2 == f"{func_name}.{version}.{identifier}"
+
+def test_lambda_session_name_truncation(session, ids):
+    s = "123456789a123456789b123456789c123456789d123456789e123456789f123456789g123456789"
+
+    def test(n, v, i, val):
+        value = aws_assume_role_lib.generate_lambda_session_name(
+            function_name=n,
+            function_version=v,
+            identifier=i
+        )
+
+        assert value == val, (value, val)
+
+    test(
+        s[:65],
+        1,
+        s[:5],
+        "123456789a123456789b123456789c123456789d123456789e123456789f1234"
+    )
+
+    test(
+        s[:62],
+        5,
+        s,
+        "123456789a123456789b123456789c123456789d123456789e123456789f12"
+    )
+
+    test(
+        s[:62],
+        None,
+        s,
+        "123456789a123456789b123456789c123456789d123456789e123456789f12"
+    )
+
+    test(
+        s[:59],
+        5,
+        s,
+        f"123456789a123456789b123456789c123456789d123456789e123456789.{s[:4]}"
+    )
+
+    test(
+        s[:59],
+        None,
+        s,
+        f"123456789a123456789b123456789c123456789d123456789e123456789.{s[:4]}"
+    )
+
+    test(
+        s[:50],
+        3,
+        s[:2],
+        f"123456789a123456789b123456789c123456789d123456789e.3.{s[:2]}"
+    )
+
+    value = aws_assume_role_lib.generate_lambda_session_name(
+        function_name=s[:32],
+        function_version=2,
+        identifier=uuid.uuid4().hex
+    )
+
+    assert len(value) == 64
+
+    value = aws_assume_role_lib.generate_lambda_session_name(
+        function_name=s[:57],
+        function_version=2,
+        identifier=None
+    )
+
+    assert len(value) == 64
+
+    value = aws_assume_role_lib.generate_lambda_session_name(
+        function_name=s[:37],
+        function_version=2,
+        identifier=None
+    )
+
+    # 37 + 2 + 21 (timestamp)
+    assert len(value) == 60
 
 def test_get_role_arn(session, ids):
     account_1_str = "123456789012"

@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.7
+* `generate_lambda_session_name()` now performs truncation to return a value that is always 64 characters or less.
+
 ## v1.6
 * Ensured new functions get imported when doing `from aws_assume_role_lib import *`.
 

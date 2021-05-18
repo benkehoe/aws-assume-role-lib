@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aws-assume-role-lib"
-version = "1.6.0" # update here and in aws_assume_role_lib.py
+version = "1.7.0" # update here and in aws_assume_role_lib.py
 description = "Assumed role session chaining (with credential refreshing) for boto3"
 authors = ["Ben Kehoe <ben@kehoe.io>"]
 license = "Apache-2.0"

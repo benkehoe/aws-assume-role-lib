@@ -180,9 +180,26 @@ But in a Lambda function, we do have additional context, the Lambda function its
 If you call `generate_lambda_session_name()` inside an instance of a Lambda function, it returns a session name that corresponds to the function instance, which you can use when assuming a role in the Lambda function (either with this library's `assume_role()` or any other method).
 The purpose of this is to simplify tracing usage of the session back to the function instance.
 
-If the version is `$LATEST`, the returned value is has the format `{function_name}.{identifier}`, otherwise it has the format `{function_name}.{function_version}.{identifier}`.
-The identifier is the function instance's unique ID extracted from the CloudWatch log stream name; if this fails for any reason, it's a timestamp instead.
-You can override any of the values by providing them as arguments to the function.
+The returned value is in one of the following forms, depending on the length of the values, to keep the session name within the maximum of 64 characters:
+* `{function_name}`
+* `{function_name}.{identifier}`
+* `{function_name}.{function_version}.{identifier}`
+
+The function version is never included if it is `$LATEST`.
+
+The maximum role session name length is 64 characters. To ensure this, and
+to provide at least 4 characters of the identifier when it is used, the
+following rules apply, in order:
+1. If the function name is longer than 59 characters, the session name is the truncated function name.
+2. If the function name plus the function version is longer than 59 characters, the session name is the function name plus the identifier, truncated.
+3. Otherwise, the session name is the function name plus the version (if one is found and not $LATEST) plus the identifier, truncated.
+
+The identifier is the function instance's unique ID extracted from the CloudWatch log stream name; if this fails for any reason, it's a timestamp if there's enough room for second-level precision, or a random string otherwise.
+The identifier will not be included unless at least 4 characters
+
+The identifier is the function instance's unique ID taken from the CloudWatch log stream name; if this cannot be found, it's a timestamp if the identifier can be at least 14 characters long (to provide for second-level precision), otherwise it is a random string.
+
+The values are automatically extracted from [the relevant environment variables](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html#configuration-envvars-runtime); you can override any of them by providing them as arguments to the function.
 
 # ARN formatting
 `assume_role()` requires a role ARN, and if you know the role name and account id but have trouble remembering the [exact format of role ARNs](https://docs.aws.amazon.com/service-authorization/latest/reference/list_identityandaccessmanagement.html#identityandaccessmanagement-resources-for-iam-policies), there's `get_role_arn()` for you.

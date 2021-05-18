@@ -25,11 +25,13 @@ import datetime
 import os
 import re
 import numbers
+import string
+import random
 
 import boto3
 import botocore
 
-__version__ = "1.6.0" # update here and pyproject.toml
+__version__ = "1.7.0" # update here and pyproject.toml
 
 __all__ = ["assume_role", "get_role_arn", "get_assumed_role_arn", "generate_lambda_session_name", "patch_boto3", "JSONFileCache"]
 
@@ -261,16 +263,33 @@ def generate_lambda_session_name(
         identifier: str=None):
     """For Lambda functions, generate a role session name that identifies the function.
 
-    If the function version is $LATEST, the returned value is of the form
+    The returned value is in one of the following forms:
+    {function_name}
     {function_name}.{identifier}
-
-    Otherwise, the returned value is of the form
     {function_name}.{function_version}.{identifier}
 
-    The identifier is pulled from the log stream name, falling back to a timestamp
-    if that fails for any reason. You can override any of the values with the
-    function arguments. Any characters in any of the values that are not valid for
-    role session names are replaced with underscores.
+    The function name must be retrievable from the AWS_LAMBDA_FUNCTION_NAME
+    environment variable, or it must be provided.
+
+    The function version is looked for in the AWS_LAMBDA_FUNCTION_VERSION
+    environment variable by default. Function versions of $LATEST
+    are treated the same as missing function versions.
+
+    The identifier is taken from the log stream name in the
+    AWS_LAMBDA_LOG_STREAM_NAME environment variable by default; if it is not
+    provided and this cannot be found, it's a timestamp if the identifier can be
+    at least 14 characters long (to provide for second-level precision),
+    otherwise it is a random string.
+
+    The maximum role session name length is 64 characters. To ensure this, and
+    to provide at least 4 characters of the identifier when it is used, the
+    following rules apply, in order:
+    1. If the function name is longer than 59 characters, the session name is the
+        truncated function name.
+    2. If the function name plus the function version is longer than 59 characters,
+        the session name is the function name plus the identifier, truncated.
+    3. Otherwise, the session name is the function name plus the version (if one
+        is found and not $LATEST) plus the identifier, truncated.
     """
     if not function_name:
         function_name = os.environ["AWS_LAMBDA_FUNCTION_NAME"]
@@ -285,20 +304,37 @@ def generate_lambda_session_name(
     else:
         version_component = ""
 
-    if not identifier:
+    def _get_identifier(max_length):
+        if identifier:
+            return identifier
         # the execution environment has a unique ID, but it's not exposed directly
         # the log stream name (currently) includes it and looks like
         # 2020/01/31/[$LATEST]3893xmpl7fac4485b47bb75b671a283c
         log_stream_name = os.environ.get("AWS_LAMBDA_LOG_STREAM_NAME", "")
         match = re.search(r"\w+$", log_stream_name)
         if match:
-            identifier = match.group()
+            return match.group()[:max_length]
+        elif max_length >= 14:
+            # enough for second-level precision
+            return datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S%f")[:max_length]
         else:
-            # fallback to a timestamp if something doesn't work
-            identifier = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-    identifier_component = "." + identifier
+            chars = string.ascii_lowercase + string.digits
+            return ''.join(random.choice(chars) for _ in range(max_length))
 
-    value = f"{name_component}{version_component}{identifier_component}"
+    # truncate for max role session name length of 64
+    if len(name_component) > 59:
+        # don't bother with the identifier unless we can get
+        # at least four characters of it
+        value = name_component[:64]
+    elif len(name_component) + len(version_component) > 59:
+        # don't bother with the version if we can't get it
+        max_length = 63 - len(name_component)
+        identifier_component = "." + _get_identifier(max_length)
+        value = f"{name_component}{identifier_component}"[:64]
+    else:
+        max_length = 63 - (len(name_component) + len(version_component))
+        identifier_component = "." + _get_identifier(max_length)
+        value = f"{name_component}{version_component}{identifier_component}"[:64]
 
     clean_value = re.sub(r"[^a-zA-Z0-9_=,.@-]+", "_", value)
 
