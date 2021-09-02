@@ -30,10 +30,33 @@ import random
 
 import boto3
 import botocore
+import botocore.configprovider
+import botocore.credentials
+import botocore.exceptions
+import botocore.session
+import botocore.validate
 
-__version__ = "1.7.0" # update here and pyproject.toml
+__version__ = "2.8.0" # update here and pyproject.toml
 
 __all__ = ["assume_role", "get_role_arn", "get_assumed_role_arn", "generate_lambda_session_name", "patch_boto3", "JSONFileCache"]
+
+class _ParentSessionProvider(botocore.configprovider.BaseProvider):
+    def __init__(self, name: str, parent_session: botocore.session.Session):
+        self.parent_session = parent_session
+        self.name = name
+
+    def provide(self):
+        return self.parent_session.get_config_variable(self.name)
+
+def _set_parent_session_provider(parent_session: botocore.session.Session, child_session: botocore.session.Session, name: str):
+    # first check if an explicit value has been set in the child
+    # otherwise get the value from the parent
+    chain_provider = botocore.configprovider.ChainProvider([
+        botocore.configprovider.InstanceVarProvider(name, child_session),
+        _ParentSessionProvider(name, parent_session)
+    ])
+    config_store = child_session.get_component("config_store")
+    config_store.set_config_provider(name, chain_provider)
 
 # Force people to specify the path, which has a default in botocore
 class JSONFileCache(botocore.credentials.JSONFileCache):
@@ -97,7 +120,7 @@ def get_assumed_role_session_arn(
 
 def assume_role(session: boto3.Session, RoleArn: str, *,
         RoleSessionName: str=None,
-        PolicyArns: typing.List[typing.Dict[str, str]]=None,
+        PolicyArns: typing.Union[typing.List[typing.Dict[str, str]], typing.List[str]]=None,
         Policy: typing.Union[str, typing.Dict]=None,
         DurationSeconds: typing.Union[int, datetime.timedelta]=None,
         Tags: typing.List[typing.Dict[str, str]]=None,
@@ -128,6 +151,9 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
     can be passed in additional_kwargs."""
 
     botocore_session = session._session
+
+    if PolicyArns:
+        PolicyArns = [{"arn": value} if isinstance(value, str) else value for value in PolicyArns]
 
     if Policy is not None and not isinstance(Policy, str):
         Policy = json.dumps(Policy)
@@ -186,7 +212,16 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
     elif region_name is False:
         region_name = None
     elif region_name is None:
-        region_name = botocore_session.instance_variables().get('region')
+        try:
+            _set_parent_session_provider(
+                botocore_session,
+                assumed_role_botocore_session,
+                "region")
+        except Exception as e:
+            raise RuntimeError(
+                "Unexpected breakage of botocore config API. " +
+                "Fall back to setting region_name=True to use parent session region " +
+                "or region=False to use implicit region.") from e
 
     session_kwargs = {
         "botocore_session": assumed_role_botocore_session,
@@ -208,7 +243,7 @@ def patch_boto3():
 
     def wrapper(RoleArn: str, *,
             RoleSessionName: str=None,
-            PolicyArns: typing.List[typing.Dict[str, str]]=None,
+            PolicyArns: typing.Union[typing.List[typing.Dict[str, str]], typing.List[str]]=None,
             Policy: typing.Union[str, typing.Dict]=None,
             DurationSeconds: typing.Union[int, datetime.timedelta]=None,
             Tags: typing.List[typing.Dict[str, str]]=None,
@@ -370,3 +405,163 @@ class ProgrammaticAssumeRoleProvider(botocore.credentials.CredentialProvider):
             self._get_fetcher().fetch_credentials,
             self.METHOD
         )
+
+def main(arg_strs=None, exit=None):
+    import argparse
+    import sys
+    import textwrap
+    from datetime import datetime
+
+    if not exit:
+        exit = sys.exit
+
+    TIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
+
+    def _json_dict_loader(input):
+        try:
+            data = json.loads(input)
+            if not isinstance(data, dict):
+                raise argparse.ArgumentTypeError("JSON value must be an object")
+            return data
+        except json.decoder.JSONDecodeError:
+            raise argparse.ArgumentTypeError("must be a valid JSON object")
+
+    def _dict_loader(input):
+        try:
+            data = json.loads(input)
+            if not isinstance(data, dict):
+                raise argparse.ArgumentTypeError("JSON value must be an object")
+            return data
+        except json.decoder.JSONDecodeError:
+            pass
+        return dict(v.split('=', 1) for v in input.split(','))
+
+    def _list_loader(input):
+        try:
+            data = json.loads(input)
+            if not isinstance(data, list):
+                raise argparse.ArgumentTypeError("JSON value must be a list")
+            return data
+        except json.decoder.JSONDecodeError:
+            pass
+        return input.split(',')
+
+    def _policy_arns_loader(input):
+        try:
+            data = json.loads(input)
+            if not isinstance(data, (dict, list)):
+                raise argparse.ArgumentTypeError("JSON value must be a list or object")
+            return data
+        except json.decoder.JSONDecodeError:
+            pass
+        return input.split(',')
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.dedent("""\
+    Assume the given role and print out the resulting credentials.
+
+    For env var usage, export the output:
+    export $( <invocation here> )
+
+    In general, it's better to make profiles in ~/.aws/config for role assumption,
+    which makes use of the AWS SDK's built-in support for role assumption.
+    It also gets you automatic credential refreshing from the SDKs,
+    unlike exporting them through this method.
+
+    Example config profile for role assumption:
+
+    [profile my-assumed-role]
+    role_arn = arn:aws:iam::123456789012:role/MyRole
+    # optional: role_session_name = MyRoleSessionName
+    source_profile = profile-to-call-assume-role-with
+    # or:
+    # credential_source = Environment
+    # credential_source = Ec2InstanceMetadata
+    # credential_source = EcsContainer"""))
+
+    parser.add_argument("--profile", help="the AWS config profile to use")
+    parser.add_argument("RoleArn")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--env", action="store_const", const="env", dest="format", help="print as env vars (default)")
+    group.add_argument("--json", action="store_const", const="json", dest="format", help="print credential_process-formatted JSON to stdout")
+    parser.set_defaults(format="env")
+
+    parser.add_argument("--RoleSessionName", metavar="ROLE_SESSION_NAME")
+    parser.add_argument("--PolicyArns", type=_policy_arns_loader, metavar="POLICY_ARNS", help="Arn1,Arn2 JSON list or JSON object")
+    parser.add_argument("--Policy", type=_json_dict_loader, help="JSON object")
+    parser.add_argument("--DurationSeconds", type=int, metavar="DURATION_SECONDS")
+    parser.add_argument("--Tags", type=_dict_loader, help="Key1=Value1,Key2=Value2 or JSON object")
+    parser.add_argument("--TransitiveTagKeys", type=_list_loader, metavar="TRANSITIVE_TAG_KEYS", help="Key1,Key2 or JSON list")
+    parser.add_argument("--ExternalId", metavar="EXTERNAL_ID")
+    parser.add_argument("--SerialNumber", metavar="SERIAL_NUMBER")
+    parser.add_argument("--TokenCode", metavar="TOKEN_CODE")
+    parser.add_argument("--SourceIdentity", metavar="SOURCE_IDENTITY")
+    parser.add_argument("--additional-kwargs", type=_json_dict_loader, help="JSON object")
+
+    args = parser.parse_args(args=arg_strs)
+
+    try:
+        session = boto3.Session(profile_name=args.profile)
+    except Exception as error:
+        print("Unable to locate credentials: {}".format(error), file=sys.stderr)
+        exit(3); return
+    if not session.get_credentials():
+        print("Unable to locate credentials", file=sys.stderr)
+        exit(3); return
+
+    assume_role_args = vars(args).copy()
+    for field in ["profile", "format"]:
+        assume_role_args.pop(field)
+    assume_role_args.update({
+        "session": session,
+        "region_name": True, # doesn't really matter
+    })
+
+    try:
+        assumed_role_session = assume_role(**assume_role_args)
+        credentials = assumed_role_session.get_credentials()
+        frozen_credentials = credentials.get_frozen_credentials()
+    except botocore.exceptions.ClientError as error:
+        code = error.response["Error"]["Code"]
+        msg = error.response["Error"]["Message"]
+        print("Error when assuming role [{}]: {}".format(code, msg), file=sys.stderr)
+        exit(4); return
+    except Exception as error:
+        print("Error when assuming role: {}".format(error), file=sys.stderr)
+        exit(4); return
+
+    expiration = None
+    if hasattr(credentials, '_expiry_time') and credentials._expiry_time:
+        if isinstance(credentials._expiry_time, datetime):
+            expiration = credentials._expiry_time.strftime(TIME_FORMAT)
+        elif isinstance(credentials._expiry_time, str):
+            expiration = credentials._expiry_time
+
+    if args.format == "json":
+        data = {
+            "Version": 1,
+            "AccessKeyId": frozen_credentials.access_key,
+            "SecretAccessKey": frozen_credentials.secret_key,
+            "SessionToken": frozen_credentials.token,
+        }
+        if expiration:
+            data["Expiration"] = expiration
+
+        print(json.dumps(data, indent=2))
+    elif args.format == "env":
+        lines = [
+            "AWS_ACCESS_KEY_ID={}".format(frozen_credentials.access_key),
+            "AWS_SECRET_ACCESS_KEY={}".format(frozen_credentials.secret_key),
+            "AWS_SESSION_TOKEN={}".format(frozen_credentials.token),
+        ]
+        if expiration:
+            lines.append("AWS_CREDENTIALS_EXPIRATION={}".format(expiration))
+        print("\n".join(lines))
+    else:
+        print("Unexpected format {}".format(args.format), file=sys.stderr)
+        exit(-1); return
+
+if __name__ == "__main__":
+    main()

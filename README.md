@@ -109,39 +109,39 @@ assume_role(
 
     *,
     # keyword-only arguments for AssumeRole
-    RoleSessionName:   str                            = None,
-    PolicyArns:        list[dict[str, str]]           = None,
-    Policy:            Union[str, dict]               = None,
-    DurationSeconds:   Union[int, datetime.timedelta] = None,
-    Tags:              list[dict[str, str]]           = None,
-    TransitiveTagKeys: list[str]                      = None,
-    ExternalId:        str                            = None,
-    SerialNumber:      str                            = None,
-    TokenCode:         str                            = None,
-    SourceIdentity:    str                            = None,
-    additional_kwargs: dict                           = None,
+    RoleSessionName:   str                                    = None,
+    PolicyArns:        Union[list[dict[str, str]], list[str]] = None,
+    Policy:            Union[str, dict]                       = None,
+    DurationSeconds:   Union[int, datetime.timedelta]         = None,
+    Tags:              list[dict[str, str]]                   = None,
+    TransitiveTagKeys: list[str]                              = None,
+    ExternalId:        str                                    = None,
+    SerialNumber:      str                                    = None,
+    TokenCode:         str                                    = None,
+    SourceIdentity:    str                                    = None,
+    additional_kwargs: dict                                   = None,
 
     # keyword-only arguments for returned session
-    region_name:       Union[str, bool]               = None,
+    region_name:       Union[str, bool]                       = None,
 
     # keyword-only arguments for assume_role() itself
-    validate:          bool                           = True,
-    cache:             dict                           = None,
+    validate:          bool                                   = True,
+    cache:             dict                                   = None,
 )
 ```
 
 `assume_role()` takes a session and a role ARN, and optionally [other keyword arguments for `sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role).
 Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not; it's automatically generated if one is not provided.
 
-Note that unlike the boto3 sts client method, you can provide the `Policy` parameter (the [inline session policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)) as a `dict` instead of as a serialized JSON string, and `DurationSeconds` as a `datetime.timedelta` instead of as an integer.
+Note that unlike the boto3 sts client method, you can provide the `Policy` parameter (the [inline session policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)) as a `dict` instead of as a serialized JSON string, `PolicyArns` as a list of ARNs, and `DurationSeconds` as a `datetime.timedelta` instead of as an integer.
 
-By default, the session returned by `assume_role()` uses the same region configuration as the input session.
+By default, the session returned by `assume_role()` links its region configuration to the input session.
 If you would like to set the region explicitly, pass it in the `region_name` parameter.
 
 Note that if the parent session was created without a region passed in to the `Session` constructor, it has an implicit region, based on searching potential configuration locations.
 This means that the region used by the session can change (for example, if you set `os.environ["AWS_DEFAULT_REGION"]` to a different value).
-By default, if the parent session has an implicit region, the child session has an implicit region, and they would both change.
-If the parent session has an implicit region, and you would like to fix the child session region to be explicitly the current value, pass `region_name=True`.
+By default, the child session region is linked to the parent session, so if the parent session has an implicit region, or if the parent session's region is changed directly, they would both change.
+If you would like to fix the child session region to be explicitly the current value, pass `region_name=True`.
 If, for some reason, you have an explicit region set on the parent, and want the child to have implicit region config, pass `region_name=False`.
 
 By default, `assume_role()` checks if the parameters are invalid.
@@ -231,3 +231,42 @@ Use it like:
 assumed_role_session = assume_role(session, "arn:aws:iam::123456789012:role/MyRole", cache=JSONFileCache("path/to/dir"))
 ```
 You can also use any `dict`-like object for the cache (supporting `__getitem__`/`__setitem__`/`__contains__`).
+
+# Command line use
+`aws-assume-role-lib` has basic support for retrieving assumed role credentials from the command line.
+In general, it's better to make profiles in `~/.aws/config` for role assumption, like this:
+
+```ini
+[profile my-assumed-role]
+role_arn = arn:aws:iam::123456789012:role/MyRole
+# optional: role_session_name = MyRoleSessionName
+
+source_profile = profile-to-call-assume-role-with
+# or:
+# credential_source = Environment
+# credential_source = Ec2InstanceMetadata
+# credential_source = EcsContainer
+```
+
+You can use `my-assumed-role` like any other profile.
+It uses the AWS SDKs' built-in support for role assumption, rather than relying on this third party library.
+It also gets you credential refreshing from the SDKs, where getting the credentials in the manner below cannot refresh them when they expire.
+
+But if you absolutely must have ad hoc role assumption on the command line, use the module invocation syntax `python -m aws_assume_role_lib ROLE_ARN [OPTIONS]`.
+
+The options are:
+* `--profile`: use a specific configuration profile.
+* `--env`: print the credentials as environment variables (the default), suitable for `export $(python -m aws_assume_role_lib ...)`.
+* `--json`: print the credentials in [`credential_process`-formatted JSON format](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sourcing-external.html). Note that you don't normally need to use this as a `credential_process` in a profile, because you can just directly make the profile do role assumption as shown above.
+* The remaining options are the arguments to `assume_role()`:
+  * `--RoleSessionName`
+  * `--PolicyArns`: must be a comma-separated list of ARNs, a JSON list of ARNs, or a JSON object per the API
+  * `--Policy`: must be a JSON object
+  * `--DurationSeconds`
+  * `--Tags`: must be formatted as `Key1=Value1,Key2=Value2`, or a JSON object.
+  * `--TransitiveTagKeys`: must be a comma-separated list or a JSON list.
+  * `--ExternalId`
+  * `--SerialNumber`
+  * `--TokenCode`
+  * `--SourceIdentity`
+  * `--additional-kwargs`: must be a JSON object.

@@ -6,6 +6,9 @@ import os
 import datetime
 from pathlib import Path
 from collections import namedtuple
+import sys
+import contextlib
+import io
 
 import boto3
 import botocore
@@ -87,6 +90,25 @@ def test_role_session_name(session, ids):
 
     assert response["Arn"].split("/")[-1] == session_name
 
+def test_policy_arns(session, ids):
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, PolicyArns=[
+        "arn:aws:iam::aws:policy/AWSDenyAll"
+    ])
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, PolicyArns=[
+        {"arn": "arn:aws:iam::aws:policy/AWSDenyAll"}
+    ])
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+
+    try:
+        assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, PolicyArns="arn:aws:iam::aws:policy/AWSDenyAll")
+        assert False
+    except botocore.exceptions.ParamValidationError:
+        pass
+
 def test_session_duration(session, ids):
     duration = datetime.timedelta(minutes=15)
     assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, DurationSeconds=duration)
@@ -161,7 +183,7 @@ def test_file_cache(session, ids):
 #TODO: these tests are brittle, need to go more specific with controlling configuration
 def test_region(session, ids):
     parent_region = "us-east-1"
-    session = boto3.Session(region_name=parent_region)
+    session = boto3.Session(region_name=parent_region, botocore_session=session._session)
 
     assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn)
 
@@ -186,7 +208,7 @@ def test_region_bool(session, ids):
 
     region1 = "us-east-1"
 
-    session = boto3.Session()
+    session = boto3.Session(botocore_session=session._session)
 
     os.environ["AWS_DEFAULT_REGION"] = region1
 
@@ -229,7 +251,7 @@ def test_region_bool(session, ids):
     # true stays with explicit config
     # false goes to implict config
 
-    session = boto3.Session(region_name=region1)
+    session = boto3.Session(region_name=region1, botocore_session=session._session)
 
     assumed_role_session1 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=True)
     assumed_role_session2 = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn, region_name=False)
@@ -249,6 +271,54 @@ def test_region_bool(session, ids):
         os.environ.pop("AWS_DEFAULT_REGION")
     else:
         os.environ["AWS_DEFAULT_REGION"] = prev_region_value
+
+def test_region_config_provider(session, ids):
+    old_botocore_session = botocore.session.Session()
+    new_botocore_session = botocore.session.Session()
+
+    aws_assume_role_lib._set_parent_session_provider(
+                old_botocore_session,
+                new_botocore_session,
+                "region")
+
+    # initial values can be anything, must be the same
+    assert new_botocore_session.get_config_variable("region") == old_botocore_session.get_config_variable("region")
+
+    prev_region_value = os.environ.get("AWS_DEFAULT_REGION")
+
+    # set the env var, both should get it
+    region_1 = str(uuid.uuid4())
+    os.environ["AWS_DEFAULT_REGION"] = region_1
+
+    assert old_botocore_session.get_config_variable("region") == region_1
+    assert new_botocore_session.get_config_variable("region") == region_1
+
+    os.environ.pop("AWS_DEFAULT_REGION")
+
+    # set the instance var on old, both should get it
+    region_2 = str(uuid.uuid4())
+    old_botocore_session.set_config_variable("region", region_2)
+
+    assert old_botocore_session.get_config_variable("region") == region_2
+    assert new_botocore_session.get_config_variable("region") == region_2
+
+    # set the env var again, neither should get it
+    region_3 = str(uuid.uuid4())
+    os.environ["AWS_DEFAULT_REGION"] = region_3
+
+    assert old_botocore_session.get_config_variable("region") == region_2
+    assert new_botocore_session.get_config_variable("region") == region_2
+
+    if prev_region_value is None:
+        os.environ.pop("AWS_DEFAULT_REGION")
+    else:
+        os.environ["AWS_DEFAULT_REGION"] = prev_region_value
+
+    # set the instance var on new, only new should get it
+    region_4 = str(uuid.uuid4())
+    new_botocore_session.set_config_variable("region", region_4)
+    assert old_botocore_session.get_config_variable("region") != region_4
+    assert new_botocore_session.get_config_variable("region") == region_4
 
 def test_patch_boto3(session, ids):
     assumed_role_session = session.assume_role(RoleArn=ids.RoleArn)
@@ -470,11 +540,152 @@ def test_get_assumed_role_session_arn(session, ids):
         account_1_str, "/te/st/" + role_name, role_session_name)
     assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
+@contextlib.contextmanager
+def redirect_stdout_stderr(out, err):
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = out
+    sys.stderr = err
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+def test_cli(session, ids):
+    args = []
+    if session.profile_name:
+        args.extend(["--profile", session.profile_name])
+
+    args.append(ids.RoleArn)
+
+    session_name = str(uuid.uuid4())
+    args.extend(["--RoleSessionName", session_name])
+
+    def run_test(*new_args):
+        the_args = args.copy()
+        the_args.extend(new_args)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        code_holder = []
+        def exit(code):
+            code_holder.append(code)
+        with redirect_stdout_stderr(stdout, stderr):
+            aws_assume_role_lib.main(the_args, exit=exit)
+        if code_holder:
+            code = code_holder[0]
+        else:
+            code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    code, out, err = run_test()
+    assert code == 0
+    assert len(err) == 0
+    out_data = [line.split("=", 1)[0] for line in out.splitlines()]
+    assert len(out_data) == 4
+    for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_CREDENTIALS_EXPIRATION"]:
+        assert key in out_data
+
+    code, out, err = run_test("--json")
+    assert code == 0
+    assert len(err) == 0
+    out_data = json.loads(out)
+    assert len(out_data) == 5
+    assert out_data["Version"] == 1
+    for key in ["AccessKeyId", "SecretAccessKey", "SessionToken", "Expiration"]:
+        assert key in out_data
+
+    code, out, err = run_test("--env")
+    assert code == 0
+    assert len(err) == 0
+    out_data = [line.split("=", 1)[0] for line in out.splitlines()]
+    assert len(out_data) == 4
+    for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_CREDENTIALS_EXPIRATION"]:
+        assert key in out_data
+
+    code, out, err = run_test("--PolicyArns", "arn:aws:iam::aws:policy/AWSDenyAll,arn:aws:iam::aws:policy/AdministratorAccess")
+    assert code == 0
+    assert len(err) == 0
+
+    code, out, err = run_test("--PolicyArns", json.dumps(["arn:aws:iam::aws:policy/AWSDenyAll", "arn:aws:iam::aws:policy/AdministratorAccess"]))
+    assert code == 0
+    assert len(err) == 0
+
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Deny",
+            "Action": "sns:*",
+            "Resource": "*"
+        }]
+    }
+    code, out, err = run_test("--Policy", json.dumps(policy))
+    assert code == 0
+    assert len(err) == 0
+
+    # double encode
+    code, out, err = run_test("--Policy", json.dumps(json.dumps(policy)))
+    assert code == 2
+    assert len(err) != 0
+
+    code, out, err = run_test("--DurationSeconds", "3600")
+    assert code == 0
+    assert len(err) == 0
+
+    code, out, err = run_test("--DurationSeconds", "xxx")
+    assert code == 4
+    assert len(out) == 0
+    assert len(err) != 0
+
+    code, out, err = run_test("--Tags", "foo=bar,spam=eggs")
+    assert code == 0
+    assert len(err) == 0
+
+    code, out, err = run_test("--Tags", json.dumps({"foo": "bar", "spam": "eggs"}))
+    assert code == 0
+    assert len(err) == 0
+
+    code, out, err = run_test("--Tags", json.dumps(["foo", "bar"]))
+    assert code == 2
+    assert len(err) != 0
+
+    code, out, err = run_test(
+        "--Tags",
+        json.dumps({"foo": "bar", "spam": "eggs"}),
+        "--TransitiveTagKeys",
+        "foo"
+    )
+    assert code == 0
+    assert len(err) == 0
+
+    code, out, err = run_test(
+        "--Tags",
+        json.dumps({"foo": "bar", "spam": "eggs"}),
+        "--TransitiveTagKeys",
+        json.dumps(["foo"])
+    )
+    assert code == 0
+    assert len(err) == 0
+
+    code, out, err = run_test(
+        "--Tags",
+        json.dumps({"foo": "bar", "spam": "eggs"}),
+        "--TransitiveTagKeys",
+        json.dumps({"foo": "bar"})
+    )
+    assert code == 2
+    assert len(err) != 0
+
+    code, out, err = run_test("--additional-kwargs", json.dumps({"foo": "bar"}))
+    assert code == 4
+    assert len(out) == 0
+    assert len(err) != 0
+
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("stack_name")
     parser.add_argument("--profile")
+    parser.add_argument("stack_name")
     parser.add_argument("test_name", nargs="*")
 
     args = parser.parse_args()
