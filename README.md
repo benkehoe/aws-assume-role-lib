@@ -54,6 +54,8 @@ pip install --user aws-assume-role-lib
 
 Or just add [`aws_assume_role_lib.py`](https://raw.githubusercontent.com/benkehoe/aws-assume-role-lib/main/aws_assume_role_lib.py) to your project.
 
+View the release history [here](CHANGELOG.md).
+
 # Usage
 
 ```python

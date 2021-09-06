@@ -1,5 +1,7 @@
 # Changelog
 
+`aws-assume-role-lib` uses [monotonic versioning](http://blog.appliedcompscilab.com/monotonic_versioning_manifesto/).
+
 ## v2.8
 * If `region_name=None` (the default), the child session region is linked to the parent session region (not copied, which happens if `region_name=True`). If the parent session is using a config profile, this means the child session will have a region, rather than needing/using a separately-set region (e.g., via the `AWS_DEFAULT_REGION` environment variable). For safety, this release increments the [compatibility version](http://blog.appliedcompscilab.com/monotonic_versioning_manifesto/) to 2.
 * Added [command line functionality](README.md#command-line-use).
