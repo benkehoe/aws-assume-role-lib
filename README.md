@@ -239,12 +239,19 @@ You can also use any `dict`-like object for the cache (supporting `__getitem__`/
 In general, it's better to make profiles in `~/.aws/config` for role assumption, like this:
 
 ```ini
+# this is a pre-existing profile you already have
+[profile profile-to-call-assume-role-with]
+# maybe it's IAM User credentials
+# or AWS SSO config
+# or whatever else you may have
+
 [profile my-assumed-role]
 role_arn = arn:aws:iam::123456789012:role/MyRole
 # optional: role_session_name = MyRoleSessionName
 
 source_profile = profile-to-call-assume-role-with
-# or:
+# or instead of source_profile, you can tell it to
+# use external credentials. one of:
 # credential_source = Environment
 # credential_source = Ec2InstanceMetadata
 # credential_source = EcsContainer
