@@ -437,6 +437,37 @@ def test_lambda_session_name_truncation(session, ids):
     # 37 + 2 + 21 (timestamp)
     assert len(value) == 60
 
+def test_set_session_name_from_source_identity(session, ids):
+    session_name = str(uuid.uuid4())
+    source_identity = str(uuid.uuid4())
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        RoleSessionName=session_name,
+        SourceIdentity=source_identity)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] == session_name
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        SourceIdentity=source_identity)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] == source_identity
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        RoleSessionName=aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME,
+        SourceIdentity=source_identity)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] != aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME
+    assert response["Arn"].split("/")[-1] != source_identity
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        RoleSessionName=aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] != aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME
+
 def test_get_role_arn(session, ids):
     account_1_str = "123456789012"
     account_1_num =  123456789012

@@ -38,7 +38,15 @@ import botocore.validate
 
 __version__ = "2.8.0" # update here and pyproject.toml
 
-__all__ = ["assume_role", "get_role_arn", "get_assumed_role_arn", "generate_lambda_session_name", "patch_boto3", "JSONFileCache"]
+__all__ = [
+    "assume_role",
+    "get_role_arn",
+    "get_assumed_role_arn",
+    "generate_lambda_session_name",
+    "patch_boto3",
+    "JSONFileCache",
+    "AUTOMATIC_ROLE_SESSION_NAME",
+]
 
 class _ParentSessionProvider(botocore.configprovider.BaseProvider):
     def __init__(self, name: str, parent_session: botocore.session.Session):
@@ -116,7 +124,9 @@ def get_assumed_role_session_arn(
     if "/" in role_name:
         role_name = role_name.rsplit("/", 1)[1]
 
-    return f"arn:{partition}:iam::{account_id}:assumed-role/{role_name}/{role_session_name}"
+    return f"arn:{partition}:sts::{account_id}:assumed-role/{role_name}/{role_session_name}"
+
+AUTOMATIC_ROLE_SESSION_NAME = "AUTOMATIC_ROLE_SESSION_NAME_!#$%^&*()" # use invalid chars
 
 def assume_role(session: boto3.Session, RoleArn: str, *,
         RoleSessionName: str=None,
@@ -151,6 +161,11 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
     can be passed in additional_kwargs."""
 
     botocore_session = session._session
+
+    if not RoleSessionName and SourceIdentity:
+        RoleSessionName = SourceIdentity
+    elif RoleSessionName == AUTOMATIC_ROLE_SESSION_NAME:
+        RoleSessionName = None
 
     if PolicyArns:
         PolicyArns = [{"arn": value} if isinstance(value, str) else value for value in PolicyArns]
