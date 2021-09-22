@@ -518,6 +518,40 @@ def main(arg_strs=None, exit=None):
 
     args = parser.parse_args(args=arg_strs)
 
+    getter = None
+    if args.RoleArn == "@ENV":
+        import os
+        def getter(key):
+            return os.environ.get("AWS_ASSUME_ROLE_" + key)
+        args.RoleArn = os.environ.get("AWS_ASSUME_ROLE_ARN", os.environ.get("AWS_ASSUME_ROLE_RoleArn"))
+        if not args.RoleArn:
+            parser.error("RoleArn not found in environment")
+    elif args.RoleArn.startswith("file://"):
+        file_path = args.RoleArn[len("file://"):]
+        try:
+            import yaml
+            loader = yaml.load
+        except ImportError:
+            loader = json.load
+        with open(file_path) as fp:
+            data = loader(fp)
+        if "RoleArn" not in data:
+            parser.error("RoleArn is not present in {}".format(file_path))
+        args.RoleArn = data["RoleArn"]
+        def getter(key):
+            return data.get(key)
+
+    if getter:
+        for key, value in vars(args).items():
+            print(key, value)
+            if value or key in ["profile", "RoleArn", "format"]:
+                continue
+            value = getter(key)
+            if key == "additional_kwargs" and isinstance(value, str):
+                value = json.loads(value)
+            setattr(args, key, value)
+            print(getattr(args, key))
+
     try:
         session = boto3.Session(profile_name=args.profile)
     except Exception as error:

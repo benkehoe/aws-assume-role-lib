@@ -232,7 +232,6 @@ For `get_role_arn()`, if the role name has a path, it can be provided as part of
 Assumed role session ARNs do not include the role path; if it is used in the role name it is removed.
 
 # Caching
-
 If you would like to cache the credentials on the file system, you can use the `JSONFileCache` class, which will create files under the directory you provide in the constructor (which it will create if it doesn't exist).
 Use it like:
 ```python
@@ -285,3 +284,14 @@ The options are:
   * `--TokenCode`
   * `--SourceIdentity`
   * `--additional-kwargs`: must be a JSON object.
+
+## Arguments through environment variables
+If you want to provide arguments through environment variables, you can set the `ROLE_ARN` argument to `@ENV`.
+The role ARN must then be provided in either `AWS_ASSUME_ROLE_ARN` or `AWS_ASSUME_ROLE_RoleArn` (searched in that order).
+Other arguments (except `profile` and `env`/`json`), if they are not provided as command line arguments, will be loaded (if they exist) from `AWS_ASSUME_ROLE_{name}` (using an underscore in `AWS_ASSUME_ROLE_additional_kwargs)`).
+
+## Arguments from a file
+If you want to provide arguments from a file, you can set the `ROLE_ARN` argument to `file://{path}`.
+The given path must be a JSON file, unless `pyyaml` is installed, in which case YAML is supported.
+The role ARN must be provided in the file in the `RoleArn` field.
+Other arguments (except `profile` and `env`/`json`), if they are not provided as command line arguments, will be loaded (if they exist) from the fields of the same name (using an underscore in `additional_kwargs`).
