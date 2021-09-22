@@ -291,7 +291,8 @@ The role ARN must then be provided in either `AWS_ASSUME_ROLE_ARN` or `AWS_ASSUM
 Other arguments (except `profile` and `env`/`json`), if they are not provided as command line arguments, will be loaded (if they exist) from `AWS_ASSUME_ROLE_{name}` (using an underscore in `AWS_ASSUME_ROLE_additional_kwargs)`).
 
 ## Arguments from a file
-If you want to provide arguments from a file, you can set the `ROLE_ARN` argument to `file://{path}`.
+If you want to provide arguments from a file, you can set the `ROLE_ARN` argument to `file://{path}`, or to `@FILE`, in which case the path is retrieved from the `AWS_ASSUME_ROLE_CONFIG_FILE` environment variable.
+
 The given path must be a JSON file, unless `pyyaml` is installed, in which case YAML is supported.
 The role ARN must be provided in the file in the `RoleArn` field.
 Other arguments (except `profile` and `env`/`json`), if they are not provided as command line arguments, will be loaded (if they exist) from the fields of the same name (using an underscore in `additional_kwargs`).

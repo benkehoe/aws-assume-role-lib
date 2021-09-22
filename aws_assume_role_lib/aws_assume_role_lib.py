@@ -525,9 +525,14 @@ def main(arg_strs=None, exit=None):
             return os.environ.get("AWS_ASSUME_ROLE_" + key)
         args.RoleArn = os.environ.get("AWS_ASSUME_ROLE_ARN", os.environ.get("AWS_ASSUME_ROLE_RoleArn"))
         if not args.RoleArn:
-            parser.error("RoleArn not found in environment")
-    elif args.RoleArn.startswith("file://"):
-        file_path = args.RoleArn[len("file://"):]
+            parser.error("RoleArn not found in environment, please set AWS_ASSUME_ROLE_ARN")
+    elif args.RoleArn == "@FILE" or args.RoleArn.startswith("file://"):
+        if args.RoleArn == "@FILE":
+            file_path = os.environ.get("AWS_ASSUME_ROLE_CONFIG_FILE")
+            if not file_path:
+                parser.error("File path not found in environment, please set AWS_ASSUME_ROLE_CONFIG_FILE")
+        else:
+            file_path = args.RoleArn[len("file://"):]
         try:
             import yaml
             loader = yaml.load
