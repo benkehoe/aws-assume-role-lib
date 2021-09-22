@@ -437,6 +437,37 @@ def test_lambda_session_name_truncation(session, ids):
     # 37 + 2 + 21 (timestamp)
     assert len(value) == 60
 
+def test_set_session_name_from_source_identity(session, ids):
+    session_name = str(uuid.uuid4())
+    source_identity = str(uuid.uuid4())
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        RoleSessionName=session_name,
+        SourceIdentity=source_identity)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] == session_name
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        SourceIdentity=source_identity)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] == source_identity
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        RoleSessionName=aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME,
+        SourceIdentity=source_identity)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] != aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME
+    assert response["Arn"].split("/")[-1] != source_identity
+
+    assumed_role_session = aws_assume_role_lib.assume_role(session, RoleArn=ids.RoleArn,
+        RoleSessionName=aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME)
+
+    response = assumed_role_session.client('sts').get_caller_identity()
+    assert response["Arn"].split("/")[-1] != aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME
+
 def test_get_role_arn(session, ids):
     account_1_str = "123456789012"
     account_1_num =  123456789012
@@ -508,37 +539,37 @@ def test_get_assumed_role_session_arn(session, ids):
     # account formatting
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_str, role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_num, role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_str, role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_num, role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     # partition
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_str, role_name, role_session_name, partition="aws-cn")
-    assert arn == f"arn:aws-cn:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws-cn:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     # path
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_str, "/" + role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_str, "te/st/" + role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
     arn = aws_assume_role_lib.get_assumed_role_session_arn(
         account_1_str, "/te/st/" + role_name, role_session_name)
-    assert arn == f"arn:aws:iam::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
+    assert arn == f"arn:aws:sts::{account_1_str}:assumed-role/{role_name}/{role_session_name}"
 
 @contextlib.contextmanager
 def redirect_stdout_stderr(out, err):

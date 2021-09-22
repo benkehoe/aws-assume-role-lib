@@ -133,7 +133,10 @@ assume_role(
 ```
 
 `assume_role()` takes a session and a role ARN, and optionally [other keyword arguments for `sts.AssumeRole`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role).
-Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not; it's automatically generated if one is not provided.
+
+Unlike the `AssumeRole` API call itself, `RoleArn` is required, but `RoleSessionName` is not.
+The `RoleSessionName` is set for you if it is not provided; it will use the [`SourceIdentity`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html) if that is provided, otherwise it will generated.
+If you want this generated value for `RoleSessionName` when `SourceIdentity` is provided (the behavior in v2.8 and before), set `RoleSessionName` to the special value `aws_assume_role_lib.AUTOMATIC_ROLE_SESSION_NAME`.
 
 Note that unlike the boto3 sts client method, you can provide the `Policy` parameter (the [inline session policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)) as a `dict` instead of as a serialized JSON string, `PolicyArns` as a list of ARNs, and `DurationSeconds` as a `datetime.timedelta` instead of as an integer.
 
@@ -141,7 +144,7 @@ By default, the session returned by `assume_role()` links its region configurati
 If you would like to set the region explicitly, pass it in the `region_name` parameter.
 
 Note that if the parent session was created without a region passed in to the `Session` constructor, it has an implicit region, based on searching potential configuration locations.
-This means that the region used by the session can change (for example, if you set `os.environ["AWS_DEFAULT_REGION"]` to a different value).
+This means that the region used by the session can change (for example, if you set or change `os.environ["AWS_DEFAULT_REGION"]`).
 By default, the child session region is linked to the parent session, so if the parent session has an implicit region, or if the parent session's region is changed directly, they would both change.
 If you would like to fix the child session region to be explicitly the current value, pass `region_name=True`.
 If, for some reason, you have an explicit region set on the parent, and want the child to have implicit region config, pass `region_name=False`.
@@ -175,7 +178,8 @@ assumed_role_session = session.assume_role("arn:aws:iam::123456789012:role/MyRol
 ```
 
 # Role session names for Lambda functions
-If you don't provide a role session name, the underlying `botocore` library [generates one using a timestamp](https://github.com/boto/botocore/blob/c53072ec257ef47e2fc749c384a9488fd3f3e626/botocore/credentials.py#L730).
+If you don't provide a role session name, but you provide a [`SourceIdentity`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html), this value is used for the role session name as well.
+If `SourceIdentity` is not provided either, the underlying `botocore` library [generates one using a timestamp](https://github.com/boto/botocore/blob/c53072ec257ef47e2fc749c384a9488fd3f3e626/botocore/credentials.py#L730).
 That's the best it can do, because it doesn't have any other context.
 
 But in a Lambda function, we do have additional context, the Lambda function itself.
@@ -209,21 +213,22 @@ There's additionally a `get_assumed_role_session_arn()` for formatting assumed r
 
 ```
 get_role_arn(
-    account_id: typing.Union[str, int],
+    account_id: Union[str, int],
     role_name:  str,
-    path:       str                    = "",
-    partition:  str                    = "aws",
+    path:       str             = "",
+    partition:  str             = "aws",
 )
 
 get_assumed_role_session_arn(
-    account_id:        typing.Union[str, int],
+    account_id:        Union[str, int],
     role_name:         str,
     role_session_name: str,
-    partition:         str                    = "aws",
+    partition:         str             = "aws",
 )
 ```
 
-If the role name has a path, it can be provided as part of the name, or it can be provided separately on `get_role_arn()` (assumed role session ARNs do not include the role path).
+For `get_role_arn()`, if the role name has a path, it can be provided as part of the name or as the separate `path` argument (but not both).
+Assumed role session ARNs do not include the role path; if it is used in the role name it is removed.
 
 # Caching
 
