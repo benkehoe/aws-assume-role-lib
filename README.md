@@ -100,6 +100,7 @@ def handler(event, context):
     # do stuff with the assumed role using ASSUMED_ROLE_SESSION
     print(ASSUMED_ROLE_SESSION.client("sts").get_caller_identity()["Arn"])
 ```
+Learn more about the benefits of `aws-assume-role-lib` in Lambda functions in the [demo](lambda-demo/README.md).
 
 # Interface
 
@@ -178,6 +179,8 @@ assumed_role_session = session.assume_role("arn:aws:iam::123456789012:role/MyRol
 ```
 
 # Role session names for Lambda functions
+Learn more about the benefits of `aws-assume-role-lib` in Lambda functions in the [demo](lambda-demo/README.md).
+
 If you don't provide a role session name, but you provide a [`SourceIdentity`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html), this value is used for the role session name as well.
 If `SourceIdentity` is not provided either, the underlying `botocore` library [generates one using a timestamp](https://github.com/boto/botocore/blob/c53072ec257ef47e2fc749c384a9488fd3f3e626/botocore/credentials.py#L730).
 That's the best it can do, because it doesn't have any other context.

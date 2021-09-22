@@ -1,0 +1,82 @@
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  RoleArn:
+    Type: String
+  BucketName:
+    Type: String
+  TableName:
+    Type: String
+  UseSourceIdentity:
+    Type: String
+    AllowedValues: ["true", "false"]
+
+Outputs:
+  Function1Name:
+    Value: !Ref Function1
+  Function2Name:
+    Value: !Ref Function2
+  Function3Name:
+    Value: !Ref Function3
+  Function4Name:
+    Value: !Ref Function4
+
+Globals:
+  Function:
+    Runtime: python3.9
+    CodeUri: ./src
+    Timeout: 30
+    Environment:
+      Variables:
+        ROLE_ARN: !Ref RoleArn
+        BUCKET_NAME: !Ref BucketName
+        TABLE_NAME: !Ref TableName
+        USE_SOURCE_IDENTITY: !Ref UseSourceIdentity
+
+Resources:
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Action: sts:AssumeRole
+          Principal:
+            Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AssumeRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action:
+              - sts:AssumeRole
+              - sts:SetSourceIdentity
+              Resource: !Ref RoleArn
+
+  Function1:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler1.handler
+      Role: !GetAtt FunctionRole.Arn
+
+  Function2:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler2.handler
+      Role: !GetAtt FunctionRole.Arn
+
+  Function3:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler3.handler
+      Role: !GetAtt FunctionRole.Arn
+
+  Function4:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler4.handler
+      Role: !GetAtt FunctionRole.Arn
