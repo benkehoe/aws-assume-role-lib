@@ -41,7 +41,7 @@ __version__ = "2.8.0" # update here and pyproject.toml
 __all__ = [
     "assume_role",
     "get_role_arn",
-    "get_assumed_role_arn",
+    "get_assumed_role_session_arn",
     "generate_lambda_session_name",
     "patch_boto3",
     "JSONFileCache",

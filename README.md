@@ -52,7 +52,7 @@ If you've only used `boto3.client()` and are not familiar with boto3 sessions, [
 pip install --user aws-assume-role-lib
 ```
 
-Or just add [`aws_assume_role_lib.py`](https://raw.githubusercontent.com/benkehoe/aws-assume-role-lib/main/aws_assume_role_lib.py) to your project.
+Or just add [`aws_assume_role_lib.py`](https://raw.githubusercontent.com/benkehoe/aws-assume-role-lib/main/aws_assume_role_lib/aws_assume_role_lib.py) to your project.
 
 View the release history [here](CHANGELOG.md).
 
