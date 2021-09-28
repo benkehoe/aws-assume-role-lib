@@ -276,7 +276,8 @@ def test_region_config_provider(session, ids):
     old_botocore_session = botocore.session.Session()
     new_botocore_session = botocore.session.Session()
 
-    aws_assume_role_lib._set_parent_session_provider(
+    from aws_assume_role_lib.aws_assume_role_lib import _set_parent_session_provider
+    _set_parent_session_provider(
                 old_botocore_session,
                 new_botocore_session,
                 "region")
@@ -584,6 +585,8 @@ def redirect_stdout_stderr(out, err):
         sys.stderr = old_stderr
 
 def test_cli(session, ids):
+    from aws_assume_role_lib.aws_assume_role_lib import main as lib_main
+
     args = []
     if session.profile_name:
         args.extend(["--profile", session.profile_name])
@@ -602,7 +605,7 @@ def test_cli(session, ids):
         def exit(code):
             code_holder.append(code)
         with redirect_stdout_stderr(stdout, stderr):
-            aws_assume_role_lib.main(the_args, exit=exit)
+            lib_main(the_args, exit=exit)
         if code_holder:
             code = code_holder[0]
         else:
