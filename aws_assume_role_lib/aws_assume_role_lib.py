@@ -471,6 +471,16 @@ def main(arg_strs=None, exit=None):
             pass
         return input.split(',')
 
+    def _get_env_var_name(name):
+        import re
+        prefix = "AWS_ASSUME_ROLE_"
+        suffix = re.sub(r"(?<!\A)([A-Z])", r"_\1", name).replace("-", "_").upper()
+        if suffix.startswith("ROLE_"):
+            suffix = suffix[len("ROLE_"):]
+        key = prefix + suffix
+        print(name, key)
+        return key
+
     parser = argparse.ArgumentParser(
         prog="python -m aws_assume_role_lib",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -497,15 +507,19 @@ def main(arg_strs=None, exit=None):
     # credential_source = EcsContainer"""))
 
     parser.add_argument("--profile", help="the AWS config profile to use")
-    parser.add_argument("RoleArn")
-
+    parser.add_argument("RoleArn", nargs="?", metavar="ROLE_ARN")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--env", action="store_const", const="env", dest="format", help="print as env vars (default)")
-    group.add_argument("--json", action="store_const", const="json", dest="format", help="print credential_process-formatted JSON to stdout")
-    parser.set_defaults(format="env")
+    group.add_argument("--from-env", action="store_true")
+    group.add_argument("--from-file", type=argparse.FileType, metavar="FILE")
+
+    parser.add_argument("--format", choices=["json", "env"], default="env", help="print as env vars (default) or credential_process-formatted JSON")
+    if "--env" in sys.argv:
+        parser.add_argument("--env", action="store_const", const="env", dest="format")
+    if "--json" in sys.argv:
+        parser.add_argument("--json", action="store_const", const="json", dest="format")
 
     parser.add_argument("--RoleSessionName", metavar="ROLE_SESSION_NAME")
-    parser.add_argument("--PolicyArns", type=_policy_arns_loader, metavar="POLICY_ARNS", help="Arn1,Arn2 JSON list or JSON object")
+    parser.add_argument("--PolicyArns", type=_policy_arns_loader, metavar="POLICY_ARNS", help="Arn1,Arn2 or JSON list or JSON object")
     parser.add_argument("--Policy", type=_json_dict_loader, help="JSON object")
     parser.add_argument("--DurationSeconds", type=int, metavar="DURATION_SECONDS")
     parser.add_argument("--Tags", type=_dict_loader, help="Key1=Value1,Key2=Value2 or JSON object")
@@ -518,56 +532,74 @@ def main(arg_strs=None, exit=None):
 
     args = parser.parse_args(args=arg_strs)
 
-    getter = None
-    if args.RoleArn == "@ENV":
-        import os
-        def getter(key):
-            return os.environ.get("AWS_ASSUME_ROLE_" + key)
-        args.RoleArn = os.environ.get("AWS_ASSUME_ROLE_ARN", os.environ.get("AWS_ASSUME_ROLE_RoleArn"))
-        if not args.RoleArn:
-            parser.error("RoleArn not found in environment, please set AWS_ASSUME_ROLE_ARN")
-    elif args.RoleArn == "@FILE" or args.RoleArn.startswith("file://"):
-        if args.RoleArn == "@FILE":
-            file_path = os.environ.get("AWS_ASSUME_ROLE_CONFIG_FILE")
-            if not file_path:
-                parser.error("File path not found in environment, please set AWS_ASSUME_ROLE_CONFIG_FILE")
-        else:
-            file_path = args.RoleArn[len("file://"):]
+    def get_file_getter(fp):
         try:
             import yaml
-            loader = yaml.load
+            file_loader = yaml.load
         except ImportError:
-            loader = json.load
-        with open(file_path) as fp:
-            data = loader(fp)
+            file_loader = json.load
+        data = file_loader(fp)
         if "RoleArn" not in data:
-            parser.error("RoleArn is not present in {}".format(file_path))
+            parser.error("RoleArn is not present in {}".format(fp.name))
         args.RoleArn = data["RoleArn"]
         def getter(key):
-            return data.get(key)
+            value = data.get(key)
+        return getter
+
+    if args.RoleArn:
+        getter = None
+    elif args.from_env:
+        import os, os.path
+
+        file_path = os.environ.get("AWS_ASSUME_ROLE_CONFIG_FILE")
+        if file_path:
+            if not os.path.exists(file_path):
+                parser.error("Invalid File path {}".format(file_path))
+            with open(file_path) as fp:
+                getter = get_file_getter(fp)
+        else:
+            def getter(key):
+                env_var_name = _get_env_var_name(key)
+                return os.environ.get(env_var_name)
+            role_arn_key = _get_env_var_name("RoleArn")
+            args.RoleArn = os.environ.get(role_arn_key)
+            if not args.RoleArn:
+                parser.error("RoleArn not found in environment, please set {}".format(role_arn_key))
+    elif args.from_file:
+        getter = get_file_getter(args.from_file)
+    else:
+        parser.error("Must provide role ARN, --from-env, or --from-file")
+
+    ignore_keys = ["profile", "format", "from_env", "from_file"]
 
     if getter:
         for key, value in vars(args).items():
-            print(key, value)
-            if value or key in ["profile", "RoleArn", "format"]:
+            if value or key in ["RoleArn"] + ignore_keys:
                 continue
             value = getter(key)
-            if key == "additional_kwargs" and isinstance(value, str):
-                value = json.loads(value)
+            if isinstance(value, str):
+                if key in ["Policy", "additional_kwargs"]:
+                    value = _json_dict_loader(value)
+                elif key in ["Tags"]:
+                    value = _dict_loader(value)
+                elif key in ["TransitiveTagKeys"]:
+                    value = _list_loader(value)
+                elif key in ["PolicyArns"]:
+                    value = _policy_arns_loader(value)
             setattr(args, key, value)
-            print(getattr(args, key))
+            print(key, value, getattr(args, key))
 
     try:
         session = boto3.Session(profile_name=args.profile)
     except Exception as error:
-        print("Unable to locate credentials: {}".format(error), file=sys.stderr)
+        print("Unable to initialize session: {}".format(error), file=sys.stderr)
         exit(3); return
     if not session.get_credentials():
         print("Unable to locate credentials", file=sys.stderr)
         exit(3); return
 
     assume_role_args = vars(args).copy()
-    for field in ["profile", "format"]:
+    for field in ignore_keys:
         assume_role_args.pop(field)
     assume_role_args.update({
         "session": session,
@@ -586,6 +618,8 @@ def main(arg_strs=None, exit=None):
     except Exception as error:
         print("Error when assuming role: {}".format(error), file=sys.stderr)
         exit(4); return
+
+    print(json.dumps(assumed_role_session.client("sts").get_caller_identity(), indent=2))
 
     expiration = None
     if hasattr(credentials, '_expiry_time') and credentials._expiry_time:
