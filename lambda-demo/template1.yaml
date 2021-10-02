@@ -1,0 +1,80 @@
+Parameters:
+  AccountToTrust:
+    Type: String
+    Default: NOT_SET
+
+  BucketAccess:
+    Type: String
+    AllowedValues: ["Allow", "Deny"]
+
+  TableAccess:
+    Type: String
+    AllowedValues: ["Allow", "Deny"]
+
+Outputs:
+  RoleArn:
+    Value: !GetAtt Role.Arn
+  BucketName:
+    Value: !Ref Bucket
+  TableName:
+    Value: !Ref Table
+
+Conditions:
+  IsAccountToTrustSet: !Not
+    - !Equals
+      - !Ref AccountToTrust
+      - "NOT_SET"
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Action:
+          - sts:AssumeRole
+          - sts:SetSourceIdentity
+          Principal:
+            "AWS":
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+            - !If
+              - IsAccountToTrustSet
+              - !Sub arn:aws:iam::${AccountToTrust}:root
+              - !Ref AWS::NoValue
+      Policies:
+        - PolicyName: BucketAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: !Ref BucketAccess
+              Action:
+              - s3:GetObject
+              Resource: !Sub "arn:aws:s3:::${Bucket}/*"
+        - PolicyName: TableAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: !Ref TableAccess
+              Action:
+              - dynamodb:GetItem
+              Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${Table}"
