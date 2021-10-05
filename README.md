@@ -203,10 +203,8 @@ following rules apply, in order:
 2. If the function name plus the function version is longer than 59 characters, the session name is the function name plus the identifier, truncated.
 3. Otherwise, the session name is the function name plus the version (if one is found and not $LATEST) plus the identifier, truncated.
 
-The identifier is the function instance's unique ID extracted from the CloudWatch log stream name; if this fails for any reason, it's a timestamp if there's enough room for second-level precision, or a random string otherwise.
-The identifier will not be included unless at least 4 characters
-
 The identifier is the function instance's unique ID taken from the CloudWatch log stream name; if this cannot be found, it's a timestamp if the identifier can be at least 14 characters long (to provide for second-level precision), otherwise it is a random string.
+The identifier will not be included unless at least 4 characters
 
 The values are automatically extracted from [the relevant environment variables](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html#configuration-envvars-runtime); you can override any of them by providing them as arguments to the function.
 
