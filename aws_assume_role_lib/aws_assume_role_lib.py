@@ -208,19 +208,21 @@ def assume_role(session: boto3.Session, RoleArn: str, *,
         shape = session.client("sts")._service_model.shape_for("AssumeRoleRequest")
         botocore.validate.validate_parameters(validate_args, shape)
 
-    assume_role_provider = ProgrammaticAssumeRoleProvider(
+    fetcher = botocore.credentials.AssumeRoleCredentialFetcher(
         botocore_session.create_client,
         credentials,
         RoleArn,
         extra_args=extra_args,
-        cache=cache,
+        cache=cache
+    )
+
+    assumed_role_credentials = botocore.credentials.DeferredRefreshableCredentials(
+        fetcher.fetch_credentials,
+        "assume-role"
     )
 
     assumed_role_botocore_session = botocore.session.Session()
-    assumed_role_botocore_session.register_component(
-        "credential_provider",
-        botocore.credentials.CredentialResolver([assume_role_provider])
-    )
+    assumed_role_botocore_session._credentials = assumed_role_credentials
 
     if region_name is True:
         region_name = session.region_name
@@ -389,37 +391,6 @@ def generate_lambda_session_name(
     clean_value = re.sub(r"[^a-zA-Z0-9_=,.@-]+", "_", value)
 
     return clean_value
-
-class ProgrammaticAssumeRoleProvider(botocore.credentials.CredentialProvider):
-    METHOD = "assume-role"
-
-    def __init__(self, client_creator, credential_loader, role_arn,
-            extra_args=None, cache=None):
-        self._client_creator = client_creator
-        self._credential_loader = credential_loader
-        self._role_arn = role_arn
-        self._extra_args = extra_args
-        self._fetcher = None
-        if cache is None:
-            cache = {}
-        self._cache = cache
-
-    def _get_fetcher(self):
-        if not self._fetcher:
-            self._fetcher = botocore.credentials.AssumeRoleCredentialFetcher(
-                self._client_creator,
-                self._credential_loader,
-                self._role_arn,
-                extra_args=self._extra_args,
-                cache=self._cache
-            )
-        return self._fetcher
-
-    def load(self):
-        return botocore.credentials.DeferredRefreshableCredentials(
-            self._get_fetcher().fetch_credentials,
-            self.METHOD
-        )
 
 def main(arg_strs=None, exit=None):
     import argparse
