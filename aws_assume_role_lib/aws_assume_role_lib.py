@@ -472,6 +472,7 @@ def main(arg_strs=None, exit=None):
         return input.split(',')
 
     parser = argparse.ArgumentParser(
+        prog="python -m aws_assume_role_lib",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.dedent("""\
     Assume the given role and print out the resulting credentials.
