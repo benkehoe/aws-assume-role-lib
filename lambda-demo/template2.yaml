@@ -12,6 +12,9 @@ Parameters:
     AllowedValues: ["true", "false"]
 
 Outputs:
+  RoleArn:
+    Value: !GetAtt FunctionRole.Arn
+
   Function1Name:
     Value: !Ref Function1
   Function2Name:
