@@ -56,6 +56,7 @@ stack1_env = os.environ.copy()
 stack1_env.update({
     "AWS_ACCESS_KEY_ID": stack1_creds.access_key,
     "AWS_SECRET_ACCESS_KEY": stack1_creds.secret_key,
+    "AWS_DEFAULT_REGION": stack1_session.region_name,
 })
 if stack1_creds.token:
     stack1_env["AWS_SESSION_TOKEN"] = stack1_creds.token
@@ -65,6 +66,7 @@ stack2_env = os.environ.copy()
 stack2_env.update({
     "AWS_ACCESS_KEY_ID": stack2_creds.access_key,
     "AWS_SECRET_ACCESS_KEY": stack2_creds.secret_key,
+    "AWS_DEFAULT_REGION": stack2_session.region_name,
 })
 if stack2_creds.token:
     stack2_env["AWS_SESSION_TOKEN"] = stack2_creds.token
