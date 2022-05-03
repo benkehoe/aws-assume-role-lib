@@ -19,7 +19,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.6"
-boto3 = "^1.13.0"
+boto3 = "^1.17.51" # for SourceIdentity
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1.2"
