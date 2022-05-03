@@ -23,6 +23,7 @@ boto3 = "^1.13.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1.2"
+mypy = "^0.931"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
