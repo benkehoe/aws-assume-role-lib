@@ -36,7 +36,7 @@ import botocore.exceptions
 import botocore.session
 import botocore.validate
 
-__version__ = "2.9.0" # update here and pyproject.toml
+__version__ = "2.10.0" # update here and pyproject.toml
 
 __all__ = [
     "assume_role",
