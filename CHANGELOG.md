@@ -2,6 +2,10 @@
 
 `aws-assume-role-lib` uses [monotonic versioning](http://blog.appliedcompscilab.com/monotonic_versioning_manifesto/).
 
+## v2.10
+* Fix CLI support
+* Update boto3 version requirement for `SourceIdentity` validation
+
 ## v2.9
 * Fixed `get_assumed_role_session_arn()`, which incorrectly used `iam` instead of `sts` in the ARN.
 * If `RoleSessionName` is not provided but `SourceIdentity` is, the `SourceIdentity` value will be used for `RoleSessionName`, rather than the `botocore`-generated value.
